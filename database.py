@@ -212,8 +212,10 @@ def set_wishlist(reference: str, wishlist: bool) -> bool:
 
 def import_activation_csv(rows: list[dict]) -> tuple[int, int]:
     """
-    Upsert parks from parsed CSV rows. Each row must have 'park_reference' and
-    'count'. Preserves existing note fields. Returns (imported, skipped).
+    Upsert parks from parsed CSV rows. Handles both the spec column names
+    (park_reference/count) and the actual pota.app export column names
+    (reference/activations). Preserves existing note fields.
+    Returns (imported, skipped).
     """
     imported = 0
     skipped = 0
@@ -221,8 +223,9 @@ def import_activation_csv(rows: list[dict]) -> tuple[int, int]:
 
     with get_conn() as conn:
         for row in rows:
-            ref = row.get("park_reference", "").strip()
-            count_raw = row.get("count", "").strip()
+            # Support both column name conventions
+            ref = (row.get("reference") or row.get("park_reference") or "").strip()
+            count_raw = (row.get("activations") or row.get("count") or "").strip()
 
             if not ref or not count_raw:
                 skipped += 1
@@ -235,16 +238,18 @@ def import_activation_csv(rows: list[dict]) -> tuple[int, int]:
                 continue
 
             pota_url = f"https://pota.app/#/park/{ref}"
+            name = (row.get("park name") or row.get("name") or "").strip() or None
             conn.execute(
                 """
-                INSERT INTO parks (reference, pota_url, activated, activation_count, last_updated)
-                VALUES (?, ?, 1, ?, ?)
+                INSERT INTO parks (reference, name, pota_url, activated, activation_count, last_updated)
+                VALUES (?, ?, ?, 1, ?, ?)
                 ON CONFLICT(reference) DO UPDATE SET
                     activated = 1,
                     activation_count = excluded.activation_count,
+                    name = COALESCE(name, excluded.name),
                     last_updated = excluded.last_updated
                 """,
-                (ref, pota_url, count, ts),
+                (ref, name, pota_url, count, ts),
             )
             imported += 1
 
