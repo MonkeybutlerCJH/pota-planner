@@ -39,7 +39,7 @@
   - Fetch `/api/parks` on load, render colored markers
   - Green=activated, Yellow=wishlist, Grey=other; markercluster at low zoom
 
-- [ ] **Step 9**: Dynamic POTA API markers on pan/zoom
+- [x] **Step 9**: Dynamic POTA API markers on pan/zoom
   - Debounced (~500ms) handler fetches POTA API parks for visible bounds
   - Blue markers for parks not in local DB, no duplicates
 

@@ -102,6 +102,25 @@ async def proxy_park(reference: str):
     return data
 
 
+@app.get("/api/pota/locations")
+async def proxy_locations():
+    key = "all_locations"
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+
+    try:
+        async with httpx.AsyncClient(timeout=POTA_TIMEOUT) as client:
+            r = await client.get(f"{POTA_BASE}/locations")
+            r.raise_for_status()
+            data = r.json()
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"error": "POTA API unreachable", "detail": str(e)})
+
+    _cache_set(key, data)
+    return data
+
+
 @app.get("/api/pota/parks/location/{location}")
 async def proxy_parks_by_location(location: str):
     key = f"location:{location}"

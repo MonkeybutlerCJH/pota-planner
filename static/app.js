@@ -265,6 +265,62 @@ document.getElementById('btn-import-cancel').addEventListener('click', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Dynamic POTA API markers on pan/zoom
+// ---------------------------------------------------------------------------
+let _allLocations = null;        // cached [{locationDesc, latitude, longitude}, ...]
+const _fetchedLocations = new Set(); // location codes we've already fetched parks for
+let _panDebounce = null;
+
+// Pre-load all POTA locations once on startup (small payload, ~3700 entries)
+async function loadPotaLocations() {
+  try {
+    _allLocations = await api('/api/pota/locations');
+  } catch (e) {
+    _allLocations = [];
+  }
+}
+
+map.on('moveend', () => {
+  clearTimeout(_panDebounce);
+  _panDebounce = setTimeout(fetchApiMarkersForView, 500);
+});
+
+async function fetchApiMarkersForView() {
+  if (!_allLocations || map.getZoom() < 7) return;
+
+  const bounds = map.getBounds();
+  const visibleLocations = _allLocations.filter(loc =>
+    loc.latitude && loc.longitude &&
+    bounds.contains([loc.latitude, loc.longitude])
+  );
+
+  for (const loc of visibleLocations) {
+    const code = loc.locationDesc;
+    if (!code || _fetchedLocations.has(code)) continue;
+    _fetchedLocations.add(code);
+
+    try {
+      const parks = await api(`/api/pota/parks/location/${code}`);
+      if (Array.isArray(parks)) parks.forEach(addApiMarker);
+    } catch (e) { /* silently ignore — POTA API may be unreachable */ }
+  }
+}
+
+function addApiMarker(park) {
+  if (!park.latitude || !park.longitude) return;
+  if (localParkRefs.has(park.reference)) return;
+  if (markersByRef[park.reference]) return;
+
+  const marker = L.marker([park.latitude, park.longitude], {
+    icon: makeIcon('blue'),
+  });
+  marker.on('click', () => onMarkerClick(park.reference, park));
+  markersByRef[park.reference] = marker;
+  clusterGroup.addLayer(marker);
+}
+
+// ---------------------------------------------------------------------------
 // Initial load
 // ---------------------------------------------------------------------------
 loadLocalMarkers();
+loadPotaLocations();
