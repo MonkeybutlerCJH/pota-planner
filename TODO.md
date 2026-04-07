@@ -21,7 +21,7 @@
   - `POST /api/import/activations` — parse `activator_parks.csv`, upsert `activated=1` + `activation_count`
   - Skip malformed rows, return `{"imported": N, "skipped": M}`, never overwrite notes
 
-- [ ] **Step 5**: Media upload/delete/cover endpoints
+- [x] **Step 5**: Media upload/delete/cover endpoints
   - `POST /api/parks/{reference}/media` — resize photos (max 1920px, JPEG 85%), PDFs as-is
   - `DELETE /api/media/{id}`, `POST /api/media/{id}/cover`
   - Mount `data/photos` → `/photos`, `data/docs` → `/docs`

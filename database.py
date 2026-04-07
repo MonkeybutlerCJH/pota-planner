@@ -249,3 +249,48 @@ def import_activation_csv(rows: list[dict]) -> tuple[int, int]:
             imported += 1
 
     return imported, skipped
+
+
+# ---------------------------------------------------------------------------
+# Media
+# ---------------------------------------------------------------------------
+
+def insert_media(park_reference: str, file_path: str, file_type: str,
+                 category: str, caption: str = "") -> dict:
+    with get_conn() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO media (park_reference, file_path, file_type, category, caption, is_cover, created_at)
+            VALUES (?, ?, ?, ?, ?, 0, ?)
+            """,
+            (park_reference, file_path, file_type, category, caption, now_iso()),
+        )
+        row = conn.execute("SELECT * FROM media WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return row_to_dict(row)
+
+
+def delete_media(media_id: int) -> str | None:
+    """Delete media record. Returns file_path if found, None if not."""
+    with get_conn() as conn:
+        row = conn.execute("SELECT file_path FROM media WHERE id = ?", (media_id,)).fetchone()
+        if row is None:
+            return None
+        conn.execute("DELETE FROM media WHERE id = ?", (media_id,))
+    return row["file_path"]
+
+
+def set_cover(media_id: int) -> bool:
+    """Set a photo as cover for its park, unsetting any previous cover."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT park_reference FROM media WHERE id = ? AND file_type = 'photo'",
+            (media_id,),
+        ).fetchone()
+        if row is None:
+            return False
+        park_ref = row["park_reference"]
+        conn.execute(
+            "UPDATE media SET is_cover = 0 WHERE park_reference = ?", (park_ref,)
+        )
+        conn.execute("UPDATE media SET is_cover = 1 WHERE id = ?", (media_id,))
+    return True

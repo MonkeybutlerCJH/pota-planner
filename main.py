@@ -3,20 +3,22 @@ import io
 import logging
 import os
 import time
+import uuid
 from contextlib import asynccontextmanager
 from typing import Optional
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from PIL import Image
 from pydantic import BaseModel
 
 from database import (
     DATA_DIR, init_db,
     get_all_parks, get_park, upsert_park_notes, upsert_park_stub, set_wishlist,
-    import_activation_csv,
+    import_activation_csv, insert_media, delete_media, set_cover,
 )
 
 log = logging.getLogger(__name__)
@@ -195,6 +197,97 @@ async def import_activations(file: UploadFile = File(...)):
 
     imported, skipped = import_activation_csv(rows)
     return {"imported": imported, "skipped": skipped}
+
+# ---------------------------------------------------------------------------
+# Media
+# ---------------------------------------------------------------------------
+
+PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+PDF_EXTENSION = ".pdf"
+MAX_PHOTO_PX = 1920
+PHOTO_QUALITY = 85
+
+
+def _unique_filename(original: str) -> str:
+    """Append a short UUID to avoid collisions while keeping the extension."""
+    base, ext = os.path.splitext(original)
+    return f"{base}_{uuid.uuid4().hex[:8]}{ext}"
+
+
+@app.post("/api/parks/{reference}/media")
+async def upload_media(
+    reference: str,
+    file: UploadFile = File(...),
+    category: str = Form("other"),
+    caption: str = Form(""),
+):
+    # Ensure the park exists
+    upsert_park_stub(reference)
+
+    ext = os.path.splitext(file.filename or "")[1].lower()
+
+    if ext in PHOTO_EXTENSIONS:
+        file_type = "photo"
+        park_dir = os.path.join(DATA_DIR, "photos", reference)
+        os.makedirs(park_dir, exist_ok=True)
+
+        filename = _unique_filename(os.path.basename(file.filename or "photo.jpg"))
+        save_path = os.path.join(park_dir, filename)
+        rel_path = os.path.join("photos", reference, filename)
+
+        content = await file.read()
+        img = Image.open(io.BytesIO(content))
+
+        # Convert palette/RGBA modes so JPEG save works
+        if img.mode in ("P", "RGBA", "LA"):
+            img = img.convert("RGB")
+
+        # Resize if needed
+        w, h = img.size
+        if max(w, h) > MAX_PHOTO_PX:
+            scale = MAX_PHOTO_PX / max(w, h)
+            img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+
+        img.save(save_path, "JPEG", quality=PHOTO_QUALITY, optimize=True)
+
+    elif ext == PDF_EXTENSION:
+        file_type = "pdf"
+        park_dir = os.path.join(DATA_DIR, "docs", reference)
+        os.makedirs(park_dir, exist_ok=True)
+
+        filename = _unique_filename(os.path.basename(file.filename or "document.pdf"))
+        save_path = os.path.join(park_dir, filename)
+        rel_path = os.path.join("docs", reference, filename)
+
+        content = await file.read()
+        with open(save_path, "wb") as f:
+            f.write(content)
+
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
+
+    record = insert_media(reference, rel_path, file_type, category, caption)
+    return record
+
+
+@app.delete("/api/media/{media_id}")
+def remove_media(media_id: int):
+    file_path = delete_media(media_id)
+    if file_path is None:
+        raise HTTPException(status_code=404, detail="Media not found")
+
+    full_path = os.path.join(DATA_DIR, file_path)
+    if os.path.exists(full_path):
+        os.remove(full_path)
+
+    return {"deleted": media_id}
+
+
+@app.post("/api/media/{media_id}/cover")
+def set_cover_photo(media_id: int):
+    if not set_cover(media_id):
+        raise HTTPException(status_code=404, detail="Photo not found")
+    return {"cover": media_id}
 
 # ---------------------------------------------------------------------------
 # Static file mounts
