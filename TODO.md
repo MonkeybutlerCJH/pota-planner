@@ -30,7 +30,7 @@
   - `POST /api/parks/{reference}/activations`
   - Verify activations nested in `GET /api/parks/{reference}`, sorted newest first
 
-- [ ] **Step 7**: Frontend shell — HTML, CSS, map
+- [x] **Step 7**: Frontend shell — HTML, CSS, map
   - `static/index.html`, `static/style.css`, `static/app.js`
   - Dark theme, top bar (Import CSV, Search), full-height Leaflet map + markercluster (CDN)
   - Mount `static/` in FastAPI

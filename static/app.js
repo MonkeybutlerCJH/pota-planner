@@ -1,0 +1,163 @@
+/* POTA Planner — app.js */
+
+// ---------------------------------------------------------------------------
+// Map init
+// ---------------------------------------------------------------------------
+const map = L.map('map', { zoomControl: true }).setView([39.5, -98.35], 5);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  maxZoom: 19,
+}).addTo(map);
+
+const clusterGroup = L.markerClusterGroup({ chunkedLoading: true });
+map.addLayer(clusterGroup);
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let currentPark = null;          // full park object currently shown in panel
+let localParkRefs = new Set();   // references we have in local DB
+let markersByRef = {};           // ref -> L.Marker
+
+// ---------------------------------------------------------------------------
+// Marker icons
+// ---------------------------------------------------------------------------
+function makeIcon(color) {
+  const colors = {
+    green:  '#4caf50',
+    yellow: '#ffc107',
+    grey:   '#888888',
+    blue:   '#4a9eff',
+  };
+  const hex = colors[color] || colors.grey;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18">
+    <circle cx="9" cy="9" r="7" fill="${hex}" stroke="#1a1a1a" stroke-width="2"/>
+  </svg>`;
+  return L.divIcon({
+    html: svg,
+    className: '',
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+    popupAnchor: [0, -10],
+  });
+}
+
+function markerColor(park) {
+  if (park.activated) return 'green';
+  if (park.wishlist)  return 'yellow';
+  return 'grey';
+}
+
+// ---------------------------------------------------------------------------
+// Toast
+// ---------------------------------------------------------------------------
+const toastEl = document.createElement('div');
+toastEl.id = 'toast';
+document.body.appendChild(toastEl);
+
+function showToast(msg, isError = false, duration = 2500) {
+  toastEl.textContent = msg;
+  toastEl.className = 'visible' + (isError ? ' error' : '');
+  clearTimeout(toastEl._t);
+  toastEl._t = setTimeout(() => { toastEl.className = ''; }, duration);
+}
+
+// ---------------------------------------------------------------------------
+// API helpers
+// ---------------------------------------------------------------------------
+async function api(path, options = {}) {
+  try {
+    const r = await fetch(path, options);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return await r.json();
+  } catch (e) {
+    throw e;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Load local DB markers on startup
+// ---------------------------------------------------------------------------
+async function loadLocalMarkers() {
+  let parks;
+  try {
+    parks = await api('/api/parks');
+  } catch (e) {
+    showToast('Could not load local parks', true);
+    return;
+  }
+  parks.forEach(addOrUpdateMarker);
+}
+
+function addOrUpdateMarker(park) {
+  if (!park.latitude || !park.longitude) return;
+
+  localParkRefs.add(park.reference);
+
+  if (markersByRef[park.reference]) {
+    markersByRef[park.reference].setIcon(makeIcon(markerColor(park)));
+    return;
+  }
+
+  const marker = L.marker([park.latitude, park.longitude], {
+    icon: makeIcon(markerColor(park)),
+  });
+  marker.on('click', () => onMarkerClick(park.reference, park));
+  markersByRef[park.reference] = marker;
+  clusterGroup.addLayer(marker);
+}
+
+// ---------------------------------------------------------------------------
+// Marker click → open side panel
+// ---------------------------------------------------------------------------
+async function onMarkerClick(reference, parkData) {
+  openPanel();
+  setPanelLoading();
+
+  let park = parkData;
+  if (!localParkRefs.has(reference)) {
+    // Blue marker — create stub from POTA data
+    try {
+      await api(`/api/parks/${reference}/notes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      localParkRefs.add(reference);
+    } catch (e) { /* continue with what we have */ }
+  }
+
+  try {
+    park = await api(`/api/parks/${reference}`);
+  } catch (e) {
+    showToast('Could not load park details', true);
+    return;
+  }
+
+  currentPark = park;
+  renderPanel(park);
+}
+
+// ---------------------------------------------------------------------------
+// Side panel
+// ---------------------------------------------------------------------------
+function openPanel() {
+  document.getElementById('side-panel').classList.remove('hidden');
+  map.invalidateSize();
+}
+
+function closePanel() {
+  document.getElementById('side-panel').classList.add('hidden');
+  currentPark = null;
+  map.invalidateSize();
+}
+
+function setPanelLoading() {
+  document.getElementById('panel-park-name').textContent = 'Loading…';
+  document.getElementById('panel-reference').textContent = '';
+  document.getElementById('panel-body').innerHTML = '<div style="padding:20px;color:var(--text-dim)"><span class="spinner"></span>Loading park data…</div>';
+}
+
+document.getElementById('panel-close').addEventListener('click', closePanel);
+
+// ---------------------------------------------------------------------------
+// Initial load
+// ---------------------------------------------------------------------------
+loadLocalMarkers();

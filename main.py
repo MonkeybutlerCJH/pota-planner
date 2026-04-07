@@ -10,7 +10,7 @@ from typing import Optional
 import httpx
 import uvicorn
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from pydantic import BaseModel
@@ -321,11 +321,17 @@ def set_cover_photo(media_id: int):
     return {"cover": media_id}
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # Static file mounts
 # ---------------------------------------------------------------------------
 
+@app.get("/")
+def serve_index():
+    return FileResponse("static/index.html")
+
 app.mount("/photos", StaticFiles(directory=os.path.join(DATA_DIR, "photos")), name="photos")
 app.mount("/docs", StaticFiles(directory=os.path.join(DATA_DIR, "docs")), name="docs")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 if __name__ == "__main__":
