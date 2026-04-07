@@ -218,6 +218,43 @@ async function toggleWishlist(park) {
 }
 
 // ---------------------------------------------------------------------------
+// Import CSV modal
+// ---------------------------------------------------------------------------
+document.getElementById('btn-import-csv').addEventListener('click', () => {
+  document.getElementById('import-result').textContent = '';
+  document.getElementById('import-file-input').value = '';
+  document.getElementById('modal-import').classList.remove('hidden');
+});
+
+document.getElementById('btn-import-cancel').addEventListener('click', () => {
+  document.getElementById('modal-import').classList.add('hidden');
+});
+
+document.getElementById('import-file-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const resultEl = document.getElementById('import-result');
+  resultEl.textContent = 'Importing…';
+
+  const fd = new FormData();
+  fd.append('file', file);
+
+  try {
+    const res = await fetch('/api/import/activations', { method: 'POST', body: fd });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    resultEl.textContent = `Done — ${data.imported} parks imported, ${data.skipped} skipped.`;
+    // Refresh markers to reflect newly activated parks
+    const parks = await api('/api/parks');
+    parks.forEach(addOrUpdateMarker);
+  } catch (e) {
+    resultEl.style.color = 'var(--red)';
+    resultEl.textContent = `Import failed: ${e.message}`;
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Initial load
 // ---------------------------------------------------------------------------
 loadLocalMarkers();
