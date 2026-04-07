@@ -158,6 +158,66 @@ function setPanelLoading() {
 document.getElementById('panel-close').addEventListener('click', closePanel);
 
 // ---------------------------------------------------------------------------
+// Panel render (header + stub body — expanded in later steps)
+// ---------------------------------------------------------------------------
+function renderPanel(park) {
+  // Header
+  document.getElementById('panel-park-name').textContent = park.name || park.reference;
+  document.getElementById('panel-reference').textContent = park.reference;
+
+  const potaLink = document.getElementById('panel-pota-link');
+  potaLink.href = park.pota_url || `https://pota.app/#/park/${park.reference}`;
+
+  const badgeActivated = document.getElementById('badge-activated');
+  badgeActivated.classList.remove('hidden', 'badge-activated', 'badge-unactivated');
+  if (park.activated) {
+    badgeActivated.textContent = 'Activated';
+    badgeActivated.classList.add('badge-activated');
+  } else {
+    badgeActivated.textContent = 'Unactivated';
+    badgeActivated.classList.add('badge-unactivated');
+  }
+  badgeActivated.classList.remove('hidden');
+
+  const badgeCount = document.getElementById('badge-count');
+  if (park.activation_count > 0) {
+    badgeCount.textContent = `${park.activation_count}×`;
+    badgeCount.classList.remove('hidden');
+  } else {
+    badgeCount.classList.add('hidden');
+  }
+
+  const btnWishlist = document.getElementById('btn-wishlist');
+  btnWishlist.classList.toggle('active', !!park.wishlist);
+  btnWishlist.onclick = () => toggleWishlist(park);
+
+  // Body placeholder — populated fully in steps 10-13
+  document.getElementById('panel-body').innerHTML =
+    `<div style="padding:20px;color:var(--text-dim);font-size:13px;">
+       Park data loaded. Full panel coming soon.
+     </div>`;
+}
+
+async function toggleWishlist(park) {
+  const newVal = !park.wishlist;
+  try {
+    await api(`/api/parks/${park.reference}/wishlist`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wishlist: newVal }),
+    });
+    park.wishlist = newVal;
+    document.getElementById('btn-wishlist').classList.toggle('active', newVal);
+    // Update marker color
+    if (markersByRef[park.reference]) {
+      markersByRef[park.reference].setIcon(makeIcon(markerColor(park)));
+    }
+  } catch (e) {
+    showToast('Could not update wishlist', true);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Initial load
 // ---------------------------------------------------------------------------
 loadLocalMarkers();

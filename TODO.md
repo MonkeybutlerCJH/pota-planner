@@ -35,7 +35,7 @@
   - Dark theme, top bar (Import CSV, Search), full-height Leaflet map + markercluster (CDN)
   - Mount `static/` in FastAPI
 
-- [ ] **Step 8**: Map markers from local DB
+- [x] **Step 8**: Map markers from local DB
   - Fetch `/api/parks` on load, render colored markers
   - Green=activated, Yellow=wishlist, Grey=other; markercluster at low zoom
 
