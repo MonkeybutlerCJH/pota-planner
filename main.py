@@ -1,3 +1,6 @@
+import csv
+import io
+import logging
 import os
 import time
 from contextlib import asynccontextmanager
@@ -5,7 +8,7 @@ from typing import Optional
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -13,7 +16,10 @@ from pydantic import BaseModel
 from database import (
     DATA_DIR, init_db,
     get_all_parks, get_park, upsert_park_notes, upsert_park_stub, set_wishlist,
+    import_activation_csv,
 )
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # In-memory cache: { cache_key: (timestamp, data) }
@@ -164,6 +170,31 @@ def toggle_wishlist(reference: str, body: WishlistBody):
     upsert_park_stub(reference)
     set_wishlist(reference, body.wishlist)
     return {"reference": reference, "wishlist": body.wishlist}
+
+# ---------------------------------------------------------------------------
+# CSV import
+# ---------------------------------------------------------------------------
+
+@app.post("/api/import/activations")
+async def import_activations(file: UploadFile = File(...)):
+    content = await file.read()
+    try:
+        text = content.decode("utf-8-sig")  # strip BOM if present
+    except UnicodeDecodeError:
+        text = content.decode("latin-1")
+
+    reader = csv.DictReader(io.StringIO(text))
+
+    # Normalise header names: lowercase + strip whitespace
+    rows = []
+    for raw in reader:
+        rows.append({k.lower().strip(): v for k, v in raw.items()})
+
+    if not rows:
+        return {"imported": 0, "skipped": 0, "error": "No rows found in CSV"}
+
+    imported, skipped = import_activation_csv(rows)
+    return {"imported": imported, "skipped": skipped}
 
 # ---------------------------------------------------------------------------
 # Static file mounts

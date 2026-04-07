@@ -17,7 +17,7 @@
   - `POST /api/parks/{reference}/notes` (upsert, creates stub if missing)
   - `POST /api/parks/{reference}/wishlist` (toggle)
 
-- [ ] **Step 4**: CSV import endpoint
+- [x] **Step 4**: CSV import endpoint
   - `POST /api/import/activations` — parse `activator_parks.csv`, upsert `activated=1` + `activation_count`
   - Skip malformed rows, return `{"imported": N, "skipped": M}`, never overwrite notes
 

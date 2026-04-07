@@ -204,3 +204,48 @@ def set_wishlist(reference: str, wishlist: bool) -> bool:
             (1 if wishlist else 0, now_iso(), reference),
         )
     return result.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# CSV import
+# ---------------------------------------------------------------------------
+
+def import_activation_csv(rows: list[dict]) -> tuple[int, int]:
+    """
+    Upsert parks from parsed CSV rows. Each row must have 'park_reference' and
+    'count'. Preserves existing note fields. Returns (imported, skipped).
+    """
+    imported = 0
+    skipped = 0
+    ts = now_iso()
+
+    with get_conn() as conn:
+        for row in rows:
+            ref = row.get("park_reference", "").strip()
+            count_raw = row.get("count", "").strip()
+
+            if not ref or not count_raw:
+                skipped += 1
+                continue
+
+            try:
+                count = int(count_raw)
+            except ValueError:
+                skipped += 1
+                continue
+
+            pota_url = f"https://pota.app/#/park/{ref}"
+            conn.execute(
+                """
+                INSERT INTO parks (reference, pota_url, activated, activation_count, last_updated)
+                VALUES (?, ?, 1, ?, ?)
+                ON CONFLICT(reference) DO UPDATE SET
+                    activated = 1,
+                    activation_count = excluded.activation_count,
+                    last_updated = excluded.last_updated
+                """,
+                (ref, pota_url, count, ts),
+            )
+            imported += 1
+
+    return imported, skipped
