@@ -18,7 +18,8 @@ from pydantic import BaseModel
 from database import (
     DATA_DIR, init_db,
     get_all_parks, get_park, upsert_park_notes, upsert_park_stub, set_wishlist,
-    import_activation_csv, insert_media, delete_media, set_cover,
+    import_activation_csv, update_park_coordinates,
+    insert_media, delete_media, set_cover,
     insert_activation,
 )
 
@@ -197,7 +198,24 @@ async def import_activations(file: UploadFile = File(...)):
         return {"imported": 0, "skipped": 0, "error": "No rows found in CSV"}
 
     imported, skipped = import_activation_csv(rows)
-    return {"imported": imported, "skipped": skipped}
+
+    # Fetch coordinates from POTA API for each unique location in the CSV
+    # (the CSV has a "hasc" column like "US-PA" we can use)
+    locations = {r.get("hasc", "").strip() for r in rows if r.get("hasc", "").strip()}
+    coords_updated = 0
+    async with httpx.AsyncClient(timeout=POTA_TIMEOUT) as client:
+        for loc in locations:
+            try:
+                r = await client.get(f"{POTA_BASE}/location/parks/{loc}")
+                if r.status_code == 200:
+                    parks_data = r.json()
+                    if isinstance(parks_data, list):
+                        coords_updated += update_park_coordinates(parks_data)
+                        _cache_set(f"location:{loc}", parks_data)
+            except Exception:
+                pass  # coordinates are best-effort; don't fail the import
+
+    return {"imported": imported, "skipped": skipped, "coords_updated": coords_updated}
 
 # ---------------------------------------------------------------------------
 # Media

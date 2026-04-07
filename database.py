@@ -256,6 +256,35 @@ def import_activation_csv(rows: list[dict]) -> tuple[int, int]:
     return imported, skipped
 
 
+def update_park_coordinates(parks_from_api: list[dict]) -> int:
+    """
+    Given a list of park dicts from the POTA API, update lat/lng/name for any
+    parks we have in the DB that are missing coordinates. Returns count updated.
+    """
+    updated = 0
+    with get_conn() as conn:
+        for p in parks_from_api:
+            ref = p.get("reference", "").strip()
+            lat = p.get("latitude")
+            lng = p.get("longitude")
+            name = p.get("name")
+            if not ref or lat is None or lng is None:
+                continue
+            result = conn.execute(
+                """
+                UPDATE parks SET
+                    latitude  = COALESCE(latitude, ?),
+                    longitude = COALESCE(longitude, ?),
+                    name      = COALESCE(name, ?)
+                WHERE reference = ?
+                  AND (latitude IS NULL OR longitude IS NULL)
+                """,
+                (lat, lng, name, ref),
+            )
+            updated += result.rowcount
+    return updated
+
+
 # ---------------------------------------------------------------------------
 # Media
 # ---------------------------------------------------------------------------

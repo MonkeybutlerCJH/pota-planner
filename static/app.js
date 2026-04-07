@@ -223,11 +223,8 @@ async function toggleWishlist(park) {
 document.getElementById('btn-import-csv').addEventListener('click', () => {
   document.getElementById('import-result').textContent = '';
   document.getElementById('import-file-input').value = '';
+  document.getElementById('btn-import-cancel').textContent = 'Cancel';
   document.getElementById('modal-import').classList.remove('hidden');
-});
-
-document.getElementById('btn-import-cancel').addEventListener('click', () => {
-  document.getElementById('modal-import').classList.add('hidden');
 });
 
 document.getElementById('import-file-input').addEventListener('change', async (e) => {
@@ -235,7 +232,10 @@ document.getElementById('import-file-input').addEventListener('change', async (e
   if (!file) return;
 
   const resultEl = document.getElementById('import-result');
-  resultEl.textContent = 'Importing…';
+  const cancelBtn = document.getElementById('btn-import-cancel');
+  resultEl.style.color = 'var(--green)';
+  resultEl.innerHTML = '<span class="spinner"></span>Importing and fetching coordinates…';
+  cancelBtn.disabled = true;
 
   const fd = new FormData();
   fd.append('file', file);
@@ -245,13 +245,23 @@ document.getElementById('import-file-input').addEventListener('change', async (e
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     resultEl.textContent = `Done — ${data.imported} parks imported, ${data.skipped} skipped.`;
-    // Refresh markers to reflect newly activated parks
+
+    // Refresh markers with updated coordinates
     const parks = await api('/api/parks');
     parks.forEach(addOrUpdateMarker);
-  } catch (e) {
+
+    // Swap Cancel → Done
+    cancelBtn.textContent = 'Done';
+    cancelBtn.disabled = false;
+  } catch (err) {
     resultEl.style.color = 'var(--red)';
-    resultEl.textContent = `Import failed: ${e.message}`;
+    resultEl.textContent = `Import failed: ${err.message}`;
+    cancelBtn.disabled = false;
   }
+});
+
+document.getElementById('btn-import-cancel').addEventListener('click', () => {
+  document.getElementById('modal-import').classList.add('hidden');
 });
 
 // ---------------------------------------------------------------------------
