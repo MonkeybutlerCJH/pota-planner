@@ -19,6 +19,7 @@ from database import (
     DATA_DIR, init_db,
     get_all_parks, get_park, upsert_park_notes, upsert_park_stub, set_wishlist,
     import_activation_csv, insert_media, delete_media, set_cover,
+    insert_activation,
 )
 
 log = logging.getLogger(__name__)
@@ -213,6 +214,36 @@ def _unique_filename(original: str) -> str:
     base, ext = os.path.splitext(original)
     return f"{base}_{uuid.uuid4().hex[:8]}{ext}"
 
+
+# ---------------------------------------------------------------------------
+# Activations
+# ---------------------------------------------------------------------------
+
+class ActivationBody(BaseModel):
+    activation_date: str
+    bands_modes: Optional[str] = ""
+    qso_count: Optional[int] = 0
+    cell_service_actual: Optional[str] = ""
+    would_return: Optional[int] = None
+    post_notes: Optional[str] = ""
+
+
+@app.post("/api/parks/{reference}/activations")
+def log_activation(reference: str, body: ActivationBody):
+    record = insert_activation(
+        park_reference=reference,
+        activation_date=body.activation_date,
+        bands_modes=body.bands_modes or "",
+        qso_count=body.qso_count or 0,
+        cell_service_actual=body.cell_service_actual or "",
+        would_return=body.would_return,
+        post_notes=body.post_notes or "",
+    )
+    return record
+
+# ---------------------------------------------------------------------------
+# Media
+# ---------------------------------------------------------------------------
 
 @app.post("/api/parks/{reference}/media")
 async def upload_media(

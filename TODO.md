@@ -26,7 +26,7 @@
   - `DELETE /api/media/{id}`, `POST /api/media/{id}/cover`
   - Mount `data/photos` → `/photos`, `data/docs` → `/docs`
 
-- [ ] **Step 6**: Activation log endpoint
+- [x] **Step 6**: Activation log endpoint
   - `POST /api/parks/{reference}/activations`
   - Verify activations nested in `GET /api/parks/{reference}`, sorted newest first
 

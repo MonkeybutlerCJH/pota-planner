@@ -279,6 +279,31 @@ def delete_media(media_id: int) -> str | None:
     return row["file_path"]
 
 
+# ---------------------------------------------------------------------------
+# Activations
+# ---------------------------------------------------------------------------
+
+def insert_activation(park_reference: str, activation_date: str, bands_modes: str,
+                      qso_count: int, cell_service_actual: str,
+                      would_return: int, post_notes: str) -> dict:
+    upsert_park_stub(park_reference)
+    with get_conn() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO activations
+                (park_reference, activation_date, bands_modes, qso_count,
+                 cell_service_actual, would_return, post_notes, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (park_reference, activation_date, bands_modes, qso_count,
+             cell_service_actual, would_return, post_notes, now_iso()),
+        )
+        row = conn.execute(
+            "SELECT * FROM activations WHERE id = ?", (cur.lastrowid,)
+        ).fetchone()
+    return row_to_dict(row)
+
+
 def set_cover(media_id: int) -> bool:
     """Set a photo as cover for its park, unsetting any previous cover."""
     with get_conn() as conn:
