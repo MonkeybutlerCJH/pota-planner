@@ -1,14 +1,19 @@
 import os
 import time
 from contextlib import asynccontextmanager
+from typing import Optional
 
 import httpx
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
-from database import DATA_DIR, init_db
+from database import (
+    DATA_DIR, init_db,
+    get_all_parks, get_park, upsert_park_notes, upsert_park_stub, set_wishlist,
+)
 
 # ---------------------------------------------------------------------------
 # In-memory cache: { cache_key: (timestamp, data) }
@@ -112,6 +117,53 @@ async def proxy_parks_by_location(location: str):
 
     _cache_set(key, data)
     return data
+
+# ---------------------------------------------------------------------------
+# Parks CRUD
+# ---------------------------------------------------------------------------
+
+@app.get("/api/parks")
+def list_parks(activated: Optional[bool] = None, wishlist: Optional[bool] = None):
+    return get_all_parks(activated=activated, wishlist=wishlist)
+
+
+@app.get("/api/parks/{reference}")
+def get_park_detail(reference: str):
+    park = get_park(reference)
+    if park is None:
+        raise HTTPException(status_code=404, detail="Park not found")
+    return park
+
+
+class NotesBody(BaseModel):
+    parking_notes: Optional[str] = None
+    bathroom_notes: Optional[str] = None
+    antenna_notes: Optional[str] = None
+    noise_notes: Optional[str] = None
+    cell_service: Optional[str] = None
+    walk_distance: Optional[str] = None
+    special_rules: Optional[str] = None
+    general_notes: Optional[str] = None
+
+
+@app.post("/api/parks/{reference}/notes")
+def update_notes(reference: str, body: NotesBody):
+    fields = {k: v for k, v in body.model_dump().items() if v is not None}
+    upsert_park_notes(reference, fields)
+    park = get_park(reference)
+    return park
+
+
+class WishlistBody(BaseModel):
+    wishlist: bool
+
+
+@app.post("/api/parks/{reference}/wishlist")
+def toggle_wishlist(reference: str, body: WishlistBody):
+    # Create stub if park doesn't exist yet
+    upsert_park_stub(reference)
+    set_wishlist(reference, body.wishlist)
+    return {"reference": reference, "wishlist": body.wishlist}
 
 # ---------------------------------------------------------------------------
 # Static file mounts

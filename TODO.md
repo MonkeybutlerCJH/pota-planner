@@ -11,7 +11,7 @@
   - `GET /api/pota/park/{reference}` and `GET /api/pota/parks/location/{location}`
   - httpx with 10s timeout, in-memory cache (~5min TTL), graceful error if upstream unreachable
 
-- [ ] **Step 3**: Parks CRUD endpoints
+- [x] **Step 3**: Parks CRUD endpoints
   - `GET /api/parks` (with `?activated=true`, `?wishlist=true` filters)
   - `GET /api/parks/{reference}` (nested media + activations, newest first)
   - `POST /api/parks/{reference}/notes` (upsert, creates stub if missing)
