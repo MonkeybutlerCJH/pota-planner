@@ -10,8 +10,29 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
 }).addTo(map);
 
-const clusterGroup = L.markerClusterGroup({ chunkedLoading: true });
-map.addLayer(clusterGroup);
+function makeClusterGroup(color) {
+  const hex = { green: '#4caf50', yellow: '#ffc107', grey: '#888888' }[color];
+  return L.markerClusterGroup({
+    chunkedLoading: true,
+    iconCreateFunction(cluster) {
+      const n = cluster.getChildCount();
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 34 34">
+        <circle cx="17" cy="17" r="15" fill="${hex}" stroke="#1a1a1a" stroke-width="2" opacity="0.85"/>
+        <text x="17" y="22" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#fff" font-weight="bold">${n}</text>
+      </svg>`;
+      return L.divIcon({ html: svg, className: '', iconSize: [34, 34], iconAnchor: [17, 17] });
+    },
+  });
+}
+const clusterGroups = {
+  activated:   makeClusterGroup('green'),
+  wishlist:    makeClusterGroup('yellow'),
+  unactivated: makeClusterGroup('grey'),
+};
+function clusterGroupFor(cat) {
+  return clusterGroups[cat] || clusterGroups.unactivated;
+}
+Object.values(clusterGroups).forEach(g => map.addLayer(g));
 
 // ---------------------------------------------------------------------------
 // State
@@ -33,11 +54,11 @@ function parkCategory(park) {
 
 function applyFilters() {
   Object.entries(markersByRef).forEach(([ref, marker]) => {
-    const cat = markerCategoryByRef[ref] || 'api';
+    const cat = markerCategoryByRef[ref] || 'unactivated';
+    const group = clusterGroupFor(cat);
     const show = activeFilters.has(cat);
-    const inGroup = clusterGroup.hasLayer(marker);
-    if (show && !inGroup) clusterGroup.addLayer(marker);
-    else if (!show && inGroup) clusterGroup.removeLayer(marker);
+    if (show && !group.hasLayer(marker)) group.addLayer(marker);
+    else if (!show && group.hasLayer(marker)) group.removeLayer(marker);
   });
 }
 
@@ -137,10 +158,10 @@ function addOrUpdateMarker(park) {
   if (markersByRef[park.reference]) {
     const marker = markersByRef[park.reference];
     marker.setIcon(makeIcon(markerColor(park)));
-    // Re-apply filter visibility in case category changed (e.g. after CSV import)
-    const show = activeFilters.has(markerCategoryByRef[park.reference]);
-    if (show && !clusterGroup.hasLayer(marker)) clusterGroup.addLayer(marker);
-    else if (!show && clusterGroup.hasLayer(marker)) clusterGroup.removeLayer(marker);
+    // Re-apply filter visibility; remove from all groups first in case category changed
+    Object.values(clusterGroups).forEach(g => { if (g.hasLayer(marker)) g.removeLayer(marker); });
+    const cat = markerCategoryByRef[park.reference];
+    if (activeFilters.has(cat)) clusterGroupFor(cat).addLayer(marker);
     return;
   }
 
@@ -149,9 +170,8 @@ function addOrUpdateMarker(park) {
   });
   marker.on('click', () => onMarkerClick(park.reference, park));
   markersByRef[park.reference] = marker;
-  if (activeFilters.has(markerCategoryByRef[park.reference])) {
-    clusterGroup.addLayer(marker);
-  }
+  const cat = markerCategoryByRef[park.reference];
+  if (activeFilters.has(cat)) clusterGroupFor(cat).addLayer(marker);
 }
 
 // ---------------------------------------------------------------------------
@@ -620,9 +640,9 @@ async function toggleWishlist(park) {
       const marker = markersByRef[park.reference];
       marker.setIcon(makeIcon(markerColor(park)));
       markerCategoryByRef[park.reference] = parkCategory(park);
-      const show = activeFilters.has(markerCategoryByRef[park.reference]);
-      if (show && !clusterGroup.hasLayer(marker)) clusterGroup.addLayer(marker);
-      else if (!show && clusterGroup.hasLayer(marker)) clusterGroup.removeLayer(marker);
+      Object.values(clusterGroups).forEach(g => { if (g.hasLayer(marker)) g.removeLayer(marker); });
+      const cat = markerCategoryByRef[park.reference];
+      if (activeFilters.has(cat)) clusterGroupFor(cat).addLayer(marker);
     }
   } catch (e) {
     showToast('Could not update wishlist', true);
@@ -799,7 +819,7 @@ function addApiMarker(park) {
   markersByRef[park.reference] = marker;
   markerCategoryByRef[park.reference] = 'unactivated';
   if (activeFilters.has('unactivated')) {
-    clusterGroup.addLayer(marker);
+    clusterGroups.unactivated.addLayer(marker);
   }
 }
 
