@@ -117,9 +117,17 @@ async function onMarkerClick(reference, parkData) {
 
   let park = parkData;
   if (!localParkRefs.has(reference)) {
-    // Blue marker — create stub from POTA data
+    // Blue marker — create stub, passing along name/coords we already have
     try {
-      await api(`/api/parks/${reference}/notes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const stubData = {};
+      if (parkData.name)      stubData.name      = parkData.name;
+      if (parkData.latitude)  stubData.latitude  = parkData.latitude;
+      if (parkData.longitude) stubData.longitude = parkData.longitude;
+      await api(`/api/parks/${reference}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(stubData),
+      });
       localParkRefs.add(reference);
     } catch (e) { /* continue with what we have */ }
   }

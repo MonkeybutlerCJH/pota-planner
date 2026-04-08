@@ -16,7 +16,7 @@ from PIL import Image
 from pydantic import BaseModel
 
 from database import (
-    DATA_DIR, init_db,
+    DATA_DIR, init_db, get_conn,
     search_parks, get_all_parks, get_park, upsert_park_notes, upsert_park_stub, set_wishlist,
     import_activation_csv, update_park_coordinates,
     insert_media, delete_media, set_cover,
@@ -200,6 +200,11 @@ def get_park_detail(reference: str):
 
 
 class NotesBody(BaseModel):
+    # Basic park info (used when creating a stub from API data)
+    name: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    # Research note fields
     parking_notes: Optional[str] = None
     bathroom_notes: Optional[str] = None
     antenna_notes: Optional[str] = None
@@ -212,8 +217,20 @@ class NotesBody(BaseModel):
 
 @app.post("/api/parks/{reference}/notes")
 def update_notes(reference: str, body: NotesBody):
-    fields = {k: v for k, v in body.model_dump().items() if v is not None}
-    upsert_park_notes(reference, fields)
+    note_fields = {k: v for k, v in body.model_dump().items()
+                   if v is not None and k not in ('name', 'latitude', 'longitude')}
+    upsert_park_notes(reference, note_fields)
+    # Update name/coordinates if provided (fills in stub from POTA API data)
+    if any([body.name, body.latitude, body.longitude]):
+        with get_conn() as conn:
+            conn.execute(
+                """UPDATE parks SET
+                    name      = COALESCE(name, ?),
+                    latitude  = COALESCE(latitude, ?),
+                    longitude = COALESCE(longitude, ?)
+                   WHERE reference = ?""",
+                (body.name, body.latitude, body.longitude, reference),
+            )
     park = get_park(reference)
     return park
 
