@@ -43,19 +43,19 @@
   - Debounced (~500ms) handler fetches POTA API parks for visible bounds
   - Blue markers for parks not in local DB, no duplicates
 
-- [ ] **Step 10**: Side panel — structure and park header
+- [x] **Step 10**: Side panel — structure and park header
   - Slide-in right panel (~400px), map resizes on open/close
   - Park name, reference, pota.app link, activated badge, wishlist star, activation count
 
-- [ ] **Step 11**: Side panel — research notes inline editing
+- [x] **Step 11**: Side panel — research notes inline editing
   - 8 fields: parking, bathroom, antenna, noise, cell service, walk distance, special rules, general notes
   - Click to edit, blur/Enter auto-saves, brief "Saved" indicator
 
-- [ ] **Step 12**: Side panel — media section
+- [x] **Step 12**: Side panel — media section
   - Cover photo, thumbnail strip, PDF list with category badges
   - Upload buttons, lightbox, right-click/long-press → set cover / delete
 
-- [ ] **Step 13**: Side panel — activation history + log modal
+- [x] **Step 13**: Side panel — activation history + log modal
   - List of past activations, newest first
   - "Log Activation" modal: date, bands/modes, QSO count, cell service, 1–5 star rating, notes
 
