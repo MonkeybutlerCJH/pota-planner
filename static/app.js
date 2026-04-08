@@ -263,6 +263,14 @@ function renderPanel(park) {
   const potaLink = document.getElementById('panel-pota-link');
   potaLink.href = park.pota_url || `https://pota.app/#/park/${park.reference}`;
 
+  const mapsLink = document.getElementById('panel-maps-link');
+  if (park.latitude && park.longitude) {
+    mapsLink.href = `https://www.google.com/maps/search/?api=1&query=${park.latitude},${park.longitude}`;
+    mapsLink.classList.remove('hidden');
+  } else {
+    mapsLink.classList.add('hidden');
+  }
+
   const badgeActivated = document.getElementById('badge-activated');
   badgeActivated.classList.remove('hidden', 'badge-activated', 'badge-unactivated');
   if (park.activated) {
