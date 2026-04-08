@@ -213,14 +213,16 @@ async function onMarkerClick(reference, parkData) {
 // Side panel
 // ---------------------------------------------------------------------------
 function openPanel() {
-  document.getElementById('side-panel').classList.remove('hidden');
-  map.invalidateSize();
+  const panel = document.getElementById('side-panel');
+  panel.addEventListener('transitionend', () => map.invalidateSize(), { once: true });
+  panel.classList.remove('hidden');
 }
 
 function closePanel() {
-  document.getElementById('side-panel').classList.add('hidden');
+  const panel = document.getElementById('side-panel');
+  panel.addEventListener('transitionend', () => map.invalidateSize(), { once: true });
+  panel.classList.add('hidden');
   currentPark = null;
-  map.invalidateSize();
 }
 
 function setPanelLoading() {
