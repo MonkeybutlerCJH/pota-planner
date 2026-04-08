@@ -19,6 +19,41 @@ map.addLayer(clusterGroup);
 let currentPark = null;          // full park object currently shown in panel
 let localParkRefs = new Set();   // references we have in local DB
 let markersByRef = {};           // ref -> L.Marker
+let markerCategoryByRef = {};    // ref -> 'activated'|'wishlist'|'unactivated'|'api'
+const activeFilters = new Set(['activated', 'wishlist', 'unactivated']);
+
+// ---------------------------------------------------------------------------
+// Filter controls
+// ---------------------------------------------------------------------------
+function parkCategory(park) {
+  if (park.activated) return 'activated';
+  if (park.wishlist)  return 'wishlist';
+  return 'unactivated';
+}
+
+function applyFilters() {
+  Object.entries(markersByRef).forEach(([ref, marker]) => {
+    const cat = markerCategoryByRef[ref] || 'api';
+    const show = activeFilters.has(cat);
+    const inGroup = clusterGroup.hasLayer(marker);
+    if (show && !inGroup) clusterGroup.addLayer(marker);
+    else if (!show && inGroup) clusterGroup.removeLayer(marker);
+  });
+}
+
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const f = btn.dataset.filter;
+    if (activeFilters.has(f)) {
+      activeFilters.delete(f);
+      btn.classList.remove('active');
+    } else {
+      activeFilters.add(f);
+      btn.classList.add('active');
+    }
+    applyFilters();
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Marker icons
@@ -97,9 +132,15 @@ function addOrUpdateMarker(park) {
   if (!park.latitude || !park.longitude) return;
 
   localParkRefs.add(park.reference);
+  markerCategoryByRef[park.reference] = parkCategory(park);
 
   if (markersByRef[park.reference]) {
-    markersByRef[park.reference].setIcon(makeIcon(markerColor(park)));
+    const marker = markersByRef[park.reference];
+    marker.setIcon(makeIcon(markerColor(park)));
+    // Re-apply filter visibility in case category changed (e.g. after CSV import)
+    const show = activeFilters.has(markerCategoryByRef[park.reference]);
+    if (show && !clusterGroup.hasLayer(marker)) clusterGroup.addLayer(marker);
+    else if (!show && clusterGroup.hasLayer(marker)) clusterGroup.removeLayer(marker);
     return;
   }
 
@@ -108,7 +149,9 @@ function addOrUpdateMarker(park) {
   });
   marker.on('click', () => onMarkerClick(park.reference, park));
   markersByRef[park.reference] = marker;
-  clusterGroup.addLayer(marker);
+  if (activeFilters.has(markerCategoryByRef[park.reference])) {
+    clusterGroup.addLayer(marker);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -572,9 +615,14 @@ async function toggleWishlist(park) {
     });
     park.wishlist = newVal;
     document.getElementById('btn-wishlist').classList.toggle('active', newVal);
-    // Update marker color
+    // Update marker color and category
     if (markersByRef[park.reference]) {
-      markersByRef[park.reference].setIcon(makeIcon(markerColor(park)));
+      const marker = markersByRef[park.reference];
+      marker.setIcon(makeIcon(markerColor(park)));
+      markerCategoryByRef[park.reference] = parkCategory(park);
+      const show = activeFilters.has(markerCategoryByRef[park.reference]);
+      if (show && !clusterGroup.hasLayer(marker)) clusterGroup.addLayer(marker);
+      else if (!show && clusterGroup.hasLayer(marker)) clusterGroup.removeLayer(marker);
     }
   } catch (e) {
     showToast('Could not update wishlist', true);
@@ -749,7 +797,10 @@ function addApiMarker(park) {
   });
   marker.on('click', () => onMarkerClick(park.reference, park));
   markersByRef[park.reference] = marker;
-  clusterGroup.addLayer(marker);
+  markerCategoryByRef[park.reference] = 'unactivated';
+  if (activeFilters.has('unactivated')) {
+    clusterGroup.addLayer(marker);
+  }
 }
 
 // ---------------------------------------------------------------------------

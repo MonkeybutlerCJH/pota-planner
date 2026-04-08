@@ -88,6 +88,32 @@ input:focus, textarea:focus { border-color: var(--accent); }
   white-space: nowrap;
 }
 
+/* ---- Filter buttons ---- */
+#filter-buttons {
+  display: flex;
+  gap: 5px;
+}
+
+.filter-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  opacity: 0.35;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.filter-btn.active { opacity: 1; }
+
+.filter-btn[data-filter="activated"]   { border-color: #4caf50; color: #4caf50; }
+.filter-btn[data-filter="wishlist"]    { border-color: #ffc107; color: #ffc107; }
+.filter-btn[data-filter="unactivated"] { border-color: #666;    color: #aaa; }
+
+.filter-btn[data-filter="activated"]:hover,
+.filter-btn[data-filter="activated"].active   { background: rgba(76,175,80,0.12); }
+.filter-btn[data-filter="wishlist"]:hover,
+.filter-btn[data-filter="wishlist"].active    { background: rgba(255,193,7,0.10); }
+.filter-btn[data-filter="unactivated"]:hover,
+.filter-btn[data-filter="unactivated"].active { background: rgba(136,136,136,0.10); }
+
 /* ---- Search ---- */
 #search-wrapper {
   position: relative;
