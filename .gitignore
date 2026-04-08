@@ -7,3 +7,6 @@ __pycache__/
 dist/
 build/
 .DS_Store
+TODO.md
+POTA Planner — Build Specification.md
+POTA Planner — Implementation Plan.md
