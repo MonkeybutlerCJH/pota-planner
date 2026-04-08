@@ -304,13 +304,15 @@ function renderMediaSection(park) {
   const pdfs   = (park.media || []).filter(m => m.file_type === 'pdf');
   const cover  = photos.find(p => p.is_cover);
 
+  const cacheBust = `?t=${Date.now()}`;
+
   // Cover photo
   if (cover) {
     const img = document.createElement('img');
     img.className = 'cover-photo';
-    img.src = `/${cover.file_path}`;
+    img.src = `/${cover.file_path}${cacheBust}`;
     img.alt = cover.caption || 'Cover photo';
-    img.addEventListener('click', () => openLightbox(`/${cover.file_path}`));
+    img.addEventListener('click', () => openLightbox(`/${cover.file_path}${cacheBust}`));
     sec.appendChild(img);
   }
 
@@ -321,10 +323,10 @@ function renderMediaSection(park) {
     photos.forEach(photo => {
       const img = document.createElement('img');
       img.className = 'thumb' + (photo.is_cover ? ' is-cover' : '');
-      img.src = `/${photo.file_path}`;
+      img.src = `/${photo.file_path}${cacheBust}`;
       img.alt = photo.caption || '';
       img.title = photo.caption || '';
-      img.addEventListener('click', () => openLightbox(`/${photo.file_path}`));
+      img.addEventListener('click', () => openLightbox(`/${photo.file_path}${cacheBust}`));
       img.addEventListener('contextmenu', e => { e.preventDefault(); showPhotoMenu(e, photo, park); });
       strip.appendChild(img);
     });
@@ -394,12 +396,26 @@ function showPhotoMenu(e, photo, park) {
   menu.style.top  = e.clientY + 'px';
   menu.innerHTML = `
     <div class="ctx-menu-item" data-action="cover">Set as cover</div>
+    <div class="ctx-menu-item" data-action="rotate-cw">Rotate CW</div>
+    <div class="ctx-menu-item" data-action="rotate-ccw">Rotate CCW</div>
     <div class="ctx-menu-item danger" data-action="delete">Delete</div>`;
   document.body.appendChild(menu);
 
   menu.querySelector('[data-action=cover]').addEventListener('click', async () => {
     menu.remove();
     await api(`/api/media/${photo.id}/cover`, { method: 'POST' });
+    currentPark = await api(`/api/parks/${park.reference}`);
+    renderPanel(currentPark);
+  });
+  menu.querySelector('[data-action=rotate-cw]').addEventListener('click', async () => {
+    menu.remove();
+    await api(`/api/media/${photo.id}/rotate`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ degrees: 90 }) });
+    currentPark = await api(`/api/parks/${park.reference}`);
+    renderPanel(currentPark);
+  });
+  menu.querySelector('[data-action=rotate-ccw]').addEventListener('click', async () => {
+    menu.remove();
+    await api(`/api/media/${photo.id}/rotate`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ degrees: 270 }) });
     currentPark = await api(`/api/parks/${park.reference}`);
     renderPanel(currentPark);
   });

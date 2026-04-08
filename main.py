@@ -409,6 +409,34 @@ def set_cover_photo(media_id: int):
         raise HTTPException(status_code=404, detail="Photo not found")
     return {"cover": media_id}
 
+
+class RotateRequest(BaseModel):
+    degrees: int = 90  # 90 = CW, 270 = CCW
+
+
+@app.post("/api/media/{media_id}/rotate")
+def rotate_photo(media_id: int, body: RotateRequest):
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT file_path FROM media WHERE id = ? AND file_type = 'photo'",
+            (media_id,),
+        ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    if body.degrees not in (90, 180, 270):
+        raise HTTPException(status_code=400, detail="degrees must be 90, 180, or 270")
+
+    abs_path = os.path.join(DATA_DIR, row["file_path"])
+    if not os.path.exists(abs_path):
+        raise HTTPException(status_code=404, detail="Photo file not found on disk")
+
+    img = Image.open(abs_path)
+    # Pillow rotate is CCW; negate to rotate CW
+    img = img.rotate(-body.degrees, expand=True)
+    img.save(abs_path, "JPEG", quality=PHOTO_QUALITY, optimize=True)
+    return {"rotated": media_id, "degrees": body.degrees}
+
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 # Static file mounts
