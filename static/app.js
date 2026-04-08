@@ -457,7 +457,6 @@ document.getElementById('lightbox-backdrop').addEventListener('click', () =>
 // Notes section (Step 11)
 // ---------------------------------------------------------------------------
 const NOTE_FIELDS = [
-  { key: 'parking_notes',  label: 'Parking',          placeholder: 'Lot size, surface, hours…' },
   { key: 'bathroom_notes', label: 'Bathroom',          placeholder: 'Facilities available?' },
   { key: 'antenna_notes',  label: 'Antenna / Setup',   placeholder: 'Space, restrictions, directions…' },
   { key: 'noise_notes',    label: 'Noise Floor',       placeholder: 'Power lines, industrial, traffic…' },
