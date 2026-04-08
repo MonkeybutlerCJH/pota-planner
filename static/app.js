@@ -995,7 +995,6 @@ document.getElementById('btn-import-cancel').addEventListener('click', () => {
 // ---------------------------------------------------------------------------
 map.on('contextmenu', e => {
   document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
-  if (!currentPark) return;
 
   const { x, y } = e.containerPoint;
   const mapEl = document.getElementById('map');
@@ -1005,24 +1004,33 @@ map.on('contextmenu', e => {
   menu.className = 'ctx-menu';
   menu.style.left = (mapRect.left + x) + 'px';
   menu.style.top  = (mapRect.top  + y) + 'px';
-  menu.innerHTML = `<div class="ctx-menu-item" data-action="add-parking">Add parking here</div>`;
+
+  const items = [];
+  if (currentPark) items.push(`<div class="ctx-menu-item" data-action="add-parking">Add parking here</div>`);
+  items.push(`<div class="ctx-menu-item" data-action="open-maps">Open in Google Maps</div>`);
+  menu.innerHTML = items.join('');
   document.body.appendChild(menu);
 
-  menu.querySelector('[data-action=add-parking]').addEventListener('click', () => {
+  if (currentPark) {
+    menu.querySelector('[data-action=add-parking]').addEventListener('click', () => {
+      menu.remove();
+      const formSection = document.querySelector('#parking-add-form');
+      if (formSection && formSection._openParkingForm) {
+        formSection._openParkingForm(e.latlng.lat, e.latlng.lng);
+      } else if (formSection) {
+        formSection.classList.remove('hidden');
+        const latEl = formSection.querySelector('#parking-lat');
+        const lngEl = formSection.querySelector('#parking-lng');
+        if (latEl) latEl.value = e.latlng.lat.toFixed(6);
+        if (lngEl) lngEl.value = e.latlng.lng.toFixed(6);
+        formSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
+  }
+
+  menu.querySelector('[data-action=open-maps]').addEventListener('click', () => {
     menu.remove();
-    // Find the parking add form and open it pre-filled with the clicked coords
-    const formSection = document.querySelector('#parking-add-form');
-    if (formSection && formSection._openParkingForm) {
-      formSection._openParkingForm(e.latlng.lat, e.latlng.lng);
-    } else if (formSection) {
-      // Fallback: just fill the lat/lng fields and show
-      formSection.classList.remove('hidden');
-      const latEl = formSection.querySelector('#parking-lat');
-      const lngEl = formSection.querySelector('#parking-lng');
-      if (latEl) latEl.value = e.latlng.lat.toFixed(6);
-      if (lngEl) lngEl.value = e.latlng.lng.toFixed(6);
-      formSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
+    window.open(`https://www.google.com/maps/search/?api=1&query=${e.latlng.lat},${e.latlng.lng}`, '_blank');
   });
 
   const dismiss = () => { menu.remove(); document.removeEventListener('click', dismiss); };
