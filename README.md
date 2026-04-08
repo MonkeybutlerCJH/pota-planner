@@ -17,7 +17,7 @@ A local web application for planning and researching [Parks on the Air (POTA)](h
 - Python 3.10 or newer
 - `pip` (included with Python)
 
-That's it. No Node.js, no Docker, no external database.
+That's it. No Node.js, no Docker, no external database. SQLite is part of Python's standard library and requires no separate installation.
 
 ## Installation
 
