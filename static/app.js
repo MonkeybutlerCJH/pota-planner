@@ -87,6 +87,9 @@ async function loadLocalMarkers() {
     showToast('Could not load local parks', true);
     return;
   }
+  if (parks.length === 0) {
+    showToast('No parks yet — import your activator CSV to get started', false, 5000);
+  }
   parks.forEach(addOrUpdateMarker);
 }
 
@@ -160,10 +163,27 @@ function closePanel() {
 function setPanelLoading() {
   document.getElementById('panel-park-name').textContent = 'Loading…';
   document.getElementById('panel-reference').textContent = '';
-  document.getElementById('panel-body').innerHTML = '<div style="padding:20px;color:var(--text-dim)"><span class="spinner"></span>Loading park data…</div>';
+  document.getElementById('badge-activated').classList.add('hidden');
+  document.getElementById('badge-count').classList.add('hidden');
+  document.getElementById('panel-body').innerHTML =
+    '<div style="padding:24px 16px;color:var(--text-dim);display:flex;align-items:center;gap:8px">' +
+    '<span class="spinner"></span>Loading park data…</div>';
 }
 
 document.getElementById('panel-close').addEventListener('click', closePanel);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (!document.getElementById('lightbox').classList.contains('hidden')) {
+      document.getElementById('lightbox').classList.add('hidden');
+    } else if (!document.getElementById('modal-activation').classList.contains('hidden')) {
+      document.getElementById('modal-activation').classList.add('hidden');
+    } else if (!document.getElementById('modal-import').classList.contains('hidden')) {
+      document.getElementById('modal-import').classList.add('hidden');
+    } else {
+      closePanel();
+    }
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Panel render — header + all sections
@@ -285,8 +305,10 @@ function renderMediaSection(park) {
       const fd = new FormData();
       fd.append('file', file);
       fd.append('category', 'other');
+      showToast('Uploading…', false, 10000);
       try {
         await fetch(`/api/parks/${park.reference}/media`, { method: 'POST', body: fd });
+        showToast('Uploaded', false, 1500);
         currentPark = await api(`/api/parks/${park.reference}`);
         renderPanel(currentPark);
       } catch (err) {
@@ -685,6 +707,7 @@ async function loadPotaLocations() {
     _allLocations = await api('/api/pota/locations');
   } catch (e) {
     _allLocations = [];
+    showToast('POTA API unavailable — showing local parks only', true, 4000);
   }
 }
 
@@ -710,7 +733,9 @@ async function fetchApiMarkersForView() {
     try {
       const parks = await api(`/api/pota/parks/location/${code}`);
       if (Array.isArray(parks)) parks.forEach(addApiMarker);
-    } catch (e) { /* silently ignore — POTA API may be unreachable */ }
+    } catch (e) {
+      _fetchedLocations.delete(code); // allow retry on next pan
+    }
   }
 }
 

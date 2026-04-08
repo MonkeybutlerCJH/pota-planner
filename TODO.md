@@ -63,7 +63,7 @@
   - Search bar: debounced, dropdown results, fly-to + open panel on click
   - Import CSV modal: instructions, pota.app link, file picker, refresh markers after import
 
-- [ ] **Step 15**: Polish and edge cases
+- [x] **Step 15**: Polish and edge cases
   - "All data stored locally" note in UI
   - Graceful POTA API failure (toast/banner, continue with local data)
   - Loading spinners, empty DB handling, filename collision UUIDs
