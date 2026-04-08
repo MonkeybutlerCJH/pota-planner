@@ -43,7 +43,8 @@ def init_db():
                 park_reference  TEXT NOT NULL REFERENCES parks(reference),
                 latitude        REAL NOT NULL,
                 longitude       REAL NOT NULL,
-                description     TEXT,
+                title           TEXT,
+                notes           TEXT,
                 created_at      TEXT
             );
 
@@ -70,6 +71,13 @@ def init_db():
                 created_at      TEXT
             );
         """)
+
+        # Migrate existing parking_locations tables that predate title/notes columns
+        for col in ("title TEXT", "notes TEXT"):
+            try:
+                conn.execute(f"ALTER TABLE parking_locations ADD COLUMN {col}")
+            except Exception:
+                pass  # column already exists
 
 
 @contextmanager
@@ -357,6 +365,53 @@ def insert_activation(park_reference: str, activation_date: str, bands_modes: st
             "SELECT * FROM activations WHERE id = ?", (cur.lastrowid,)
         ).fetchone()
     return row_to_dict(row)
+
+
+# ---------------------------------------------------------------------------
+# Parking locations
+# ---------------------------------------------------------------------------
+
+def insert_parking_location(park_reference: str, latitude: float, longitude: float,
+                             title: str = "", notes: str = "") -> dict:
+    with get_conn() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO parking_locations (park_reference, latitude, longitude, title, notes, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (park_reference, latitude, longitude, title, notes, now_iso()),
+        )
+        row = conn.execute(
+            "SELECT * FROM parking_locations WHERE id = ?", (cur.lastrowid,)
+        ).fetchone()
+    return row_to_dict(row)
+
+
+def update_parking_location(loc_id: int, title: str, latitude: float,
+                             longitude: float, notes: str) -> dict | None:
+    with get_conn() as conn:
+        result = conn.execute(
+            """
+            UPDATE parking_locations
+            SET title = ?, latitude = ?, longitude = ?, notes = ?
+            WHERE id = ?
+            """,
+            (title, latitude, longitude, notes, loc_id),
+        )
+        if result.rowcount == 0:
+            return None
+        row = conn.execute(
+            "SELECT * FROM parking_locations WHERE id = ?", (loc_id,)
+        ).fetchone()
+    return row_to_dict(row)
+
+
+def delete_parking_location(loc_id: int) -> bool:
+    with get_conn() as conn:
+        result = conn.execute(
+            "DELETE FROM parking_locations WHERE id = ?", (loc_id,)
+        )
+    return result.rowcount > 0
 
 
 def set_cover(media_id: int) -> bool:

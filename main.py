@@ -21,6 +21,7 @@ from database import (
     import_activation_csv, update_park_coordinates,
     insert_media, delete_media, set_cover,
     insert_activation,
+    insert_parking_location, update_parking_location, delete_parking_location,
 )
 
 log = logging.getLogger(__name__)
@@ -245,6 +246,40 @@ def toggle_wishlist(reference: str, body: WishlistBody):
     upsert_park_stub(reference)
     set_wishlist(reference, body.wishlist)
     return {"reference": reference, "wishlist": body.wishlist}
+
+
+class ParkingLocationBody(BaseModel):
+    latitude: float
+    longitude: float
+    title: Optional[str] = ""
+    notes: Optional[str] = ""
+
+
+@app.post("/api/parks/{reference}/parking")
+def add_parking_location(reference: str, body: ParkingLocationBody):
+    upsert_park_stub(reference)
+    record = insert_parking_location(
+        reference, body.latitude, body.longitude,
+        title=body.title or "", notes=body.notes or ""
+    )
+    return record
+
+
+@app.put("/api/parking/{loc_id}")
+def edit_parking_location(loc_id: int, body: ParkingLocationBody):
+    record = update_parking_location(
+        loc_id, body.title or "", body.latitude, body.longitude, body.notes or ""
+    )
+    if record is None:
+        raise HTTPException(status_code=404, detail="Parking location not found")
+    return record
+
+
+@app.delete("/api/parking/{loc_id}")
+def remove_parking_location(loc_id: int):
+    if not delete_parking_location(loc_id):
+        raise HTTPException(status_code=404, detail="Parking location not found")
+    return {"deleted": loc_id}
 
 # ---------------------------------------------------------------------------
 # CSV import
