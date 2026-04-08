@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 from database import (
     DATA_DIR, init_db,
-    get_all_parks, get_park, upsert_park_notes, upsert_park_stub, set_wishlist,
+    search_parks, get_all_parks, get_park, upsert_park_notes, upsert_park_stub, set_wishlist,
     import_activation_csv, update_park_coordinates,
     insert_media, delete_media, set_cover,
     insert_activation,
@@ -150,6 +150,41 @@ async def proxy_parks_by_location(location: str):
 # ---------------------------------------------------------------------------
 # Parks CRUD
 # ---------------------------------------------------------------------------
+
+@app.get("/api/search")
+async def search(q: str = ""):
+    q = q.strip()
+    if not q:
+        return []
+
+    # Search local DB first
+    local = search_parks(q, limit=8)
+    found_refs = {p["reference"] for p in local}
+
+    # If query looks like a reference and wasn't in local DB, try POTA API
+    results = list(local)
+    if "-" in q.upper() and q.upper() not in found_refs:
+        try:
+            async with httpx.AsyncClient(timeout=POTA_TIMEOUT) as client:
+                r = await client.get(f"{POTA_BASE}/park/{q.upper()}")
+                if r.status_code == 200:
+                    data = r.json()
+                    if data and isinstance(data, dict) and data.get("reference"):
+                        results.append({
+                            "reference": data["reference"],
+                            "name": data.get("name"),
+                            "latitude": data.get("latitude"),
+                            "longitude": data.get("longitude"),
+                            "pota_url": f"https://pota.app/#/park/{data['reference']}",
+                            "activated": 0,
+                            "wishlist": 0,
+                            "_source": "pota_api",
+                        })
+        except Exception:
+            pass
+
+    return results
+
 
 @app.get("/api/parks")
 def list_parks(activated: Optional[bool] = None, wishlist: Optional[bool] = None):

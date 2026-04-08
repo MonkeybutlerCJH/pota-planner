@@ -552,6 +552,72 @@ async function toggleWishlist(park) {
 }
 
 // ---------------------------------------------------------------------------
+// Search
+// ---------------------------------------------------------------------------
+let _searchDebounce = null;
+const searchInput    = document.getElementById('search-input');
+const searchDropdown = document.getElementById('search-dropdown');
+
+searchInput.addEventListener('input', () => {
+  clearTimeout(_searchDebounce);
+  const q = searchInput.value.trim();
+  if (!q) { searchDropdown.classList.add('hidden'); return; }
+  _searchDebounce = setTimeout(() => runSearch(q), 300);
+});
+
+searchInput.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { searchDropdown.classList.add('hidden'); searchInput.blur(); }
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#search-wrapper')) searchDropdown.classList.add('hidden');
+});
+
+async function runSearch(q) {
+  let results;
+  try {
+    results = await api(`/api/search?q=${encodeURIComponent(q)}`);
+  } catch (e) {
+    return;
+  }
+
+  searchDropdown.innerHTML = '';
+  if (!results.length) {
+    searchDropdown.innerHTML = '<div class="search-result" style="color:var(--text-dim)">No results</div>';
+    searchDropdown.classList.remove('hidden');
+    return;
+  }
+
+  results.forEach(park => {
+    const item = document.createElement('div');
+    item.className = 'search-result';
+    item.innerHTML = `<div>${park.name || park.reference}</div><div class="ref">${park.reference}</div>`;
+    item.addEventListener('click', () => selectSearchResult(park));
+    searchDropdown.appendChild(item);
+  });
+  searchDropdown.classList.remove('hidden');
+}
+
+async function selectSearchResult(park) {
+  searchDropdown.classList.add('hidden');
+  searchInput.value = park.name || park.reference;
+
+  // Fly map to park
+  if (park.latitude && park.longitude) {
+    map.setView([park.latitude, park.longitude], 13);
+  }
+
+  // Open panel (creates stub if needed)
+  await onMarkerClick(park.reference, park);
+
+  // Ensure a marker exists for this park
+  if (!markersByRef[park.reference] && park.latitude && park.longitude) {
+    localParkRefs.add(park.reference);
+    addOrUpdateMarker(park);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Import CSV modal
 // ---------------------------------------------------------------------------
 document.getElementById('btn-import-csv').addEventListener('click', () => {

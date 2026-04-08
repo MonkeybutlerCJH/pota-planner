@@ -105,6 +105,27 @@ NOTE_FIELDS = {
 }
 
 
+def search_parks(query: str, limit: int = 10) -> list:
+    """Search local DB parks by reference or name (case-insensitive)."""
+    q = f"%{query.upper()}%"
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM parks
+            WHERE UPPER(reference) LIKE ?
+               OR UPPER(COALESCE(name, '')) LIKE ?
+            ORDER BY
+              CASE WHEN UPPER(reference) = ? THEN 0
+                   WHEN UPPER(reference) LIKE ? THEN 1
+                   ELSE 2 END,
+              name
+            LIMIT ?
+            """,
+            (q, q, query.upper(), f"{query.upper()}%", limit),
+        ).fetchall()
+    return rows_to_list(rows)
+
+
 def get_all_parks(activated: bool | None = None, wishlist: bool | None = None) -> list:
     conditions = []
     params = []

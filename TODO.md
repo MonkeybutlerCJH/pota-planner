@@ -59,7 +59,7 @@
   - List of past activations, newest first
   - "Log Activation" modal: date, bands/modes, QSO count, cell service, 1–5 star rating, notes
 
-- [ ] **Step 14**: Search + CSV import modal
+- [x] **Step 14**: Search + CSV import modal
   - Search bar: debounced, dropdown results, fly-to + open panel on click
   - Import CSV modal: instructions, pota.app link, file picker, refresh markers after import
 
