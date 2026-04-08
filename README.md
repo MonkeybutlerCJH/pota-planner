@@ -1,5 +1,7 @@
 # POTA Planner
 
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
 A local web application for planning and researching [Parks on the Air (POTA)](https://pota.app) amateur radio activations. Runs entirely on your machine — no cloud, no accounts, no sync. All data is stored locally in a SQLite database.
 
 ## Features
