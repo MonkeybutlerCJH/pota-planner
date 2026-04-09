@@ -373,6 +373,9 @@ input:focus, textarea:focus { border-color: var(--accent); }
 .ctx-menu-item:hover { background: var(--bg3); }
 .ctx-menu-item.danger { color: var(--red); }
 
+#btn-quit { color: var(--red); border-color: var(--red); }
+#btn-quit:hover { background: var(--red); color: #fff; }
+
 /* ---- Activation history ---- */
 .activation-item {
   padding: 8px 0;

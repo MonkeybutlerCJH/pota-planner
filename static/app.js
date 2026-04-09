@@ -946,6 +946,12 @@ async function selectSearchResult(park) {
 // ---------------------------------------------------------------------------
 // Import CSV modal
 // ---------------------------------------------------------------------------
+document.getElementById('btn-quit').addEventListener('click', async () => {
+  if (!confirm('Shut down POTA Planner?')) return;
+  await fetch('/api/shutdown', { method: 'POST' }).catch(() => {});
+  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#aaa;background:#1a1a1a;font-size:1.2rem;">POTA Planner has stopped. You may close this tab.</div>';
+});
+
 document.getElementById('btn-import-csv').addEventListener('click', () => {
   document.getElementById('import-result').textContent = '';
   document.getElementById('import-file-input').value = '';

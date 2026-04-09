@@ -2,6 +2,7 @@ import csv
 import io
 import logging
 import os
+import signal
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -71,6 +72,12 @@ app = FastAPI(title="POTA Planner", lifespan=lifespan)
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+@app.post("/api/shutdown")
+def shutdown():
+    os.kill(os.getpid(), signal.SIGTERM)
+    return {"status": "shutting down"}
 
 # ---------------------------------------------------------------------------
 # POTA API proxy
