@@ -76,7 +76,7 @@ def health():
 
 @app.post("/api/shutdown")
 def shutdown():
-    os.kill(os.getpid(), signal.SIGTERM)
+    os.killpg(os.getpgid(os.getpid()), signal.SIGTERM)
     return {"status": "shutting down"}
 
 # ---------------------------------------------------------------------------
