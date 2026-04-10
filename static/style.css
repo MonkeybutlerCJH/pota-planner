@@ -465,26 +465,27 @@ input:focus, textarea:focus { border-color: var(--accent); }
 }
 .star.lit { color: var(--yellow); }
 
-/* ---- Parking locations ---- */
-.parking-loc-item {
+/* ---- Location items (parking, activation, …) ---- */
+.loc-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  flex-direction: column;
   gap: 8px;
   padding: 5px 0;
   border-bottom: 1px solid var(--border);
   font-size: 13px;
 }
-.parking-loc-item:last-child { border-bottom: none; }
-.parking-loc-item a { color: var(--accent); font-size: 12px; white-space: nowrap; }
+.loc-item:last-child { border-bottom: none; }
+.loc-item a { color: var(--accent); font-size: 12px; white-space: nowrap; }
 
-.parking-add-form {
+.loc-add-form {
   background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 10px;
   margin-top: 8px;
 }
-.parking-add-form input {
+.loc-add-form input {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -492,8 +493,8 @@ input:focus, textarea:focus { border-color: var(--accent); }
   padding: 5px 7px;
   font-size: 12px;
 }
-.parking-add-form input:focus { outline: none; border-color: var(--accent); }
-.parking-add-form textarea {
+.loc-add-form input:focus { outline: none; border-color: var(--accent); }
+.loc-add-form textarea {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -502,19 +503,16 @@ input:focus, textarea:focus { border-color: var(--accent); }
   font-size: 12px;
   font-family: inherit;
 }
-.parking-add-form textarea:focus { outline: none; border-color: var(--accent); }
+.loc-add-form textarea:focus { outline: none; border-color: var(--accent); }
 
-.parking-loc-item { align-items: flex-start; flex-direction: column; }
-.parking-loc-display { display: flex; align-items: flex-start; gap: 8px; width: 100%; }
-.parking-loc-display.hidden { display: none; }
-.parking-add-form.hidden { display: none; }
-.btn-edit-parking { background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--text-dim); cursor: pointer; padding: 1px 6px; }
-.parking-loc-title { font-size: 13px; font-weight: 500; }
-.parking-loc-info { flex: 1; min-width: 0; cursor: pointer; }
-.parking-loc-info:hover .parking-loc-title { color: var(--accent); }
-.parking-loc-coords { font-size: 11px; color: var(--text-dim); margin-top: 1px; }
-.parking-loc-notes { font-size: 12px; color: var(--text-dim); margin-top: 3px; white-space: pre-wrap; }
-.btn-delete-parking {
+.loc-display { display: flex; align-items: flex-start; gap: 8px; width: 100%; }
+.btn-edit-loc { background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--text-dim); cursor: pointer; padding: 1px 6px; }
+.loc-title { font-size: 13px; font-weight: 500; }
+.loc-info { flex: 1; min-width: 0; cursor: pointer; }
+.loc-info:hover .loc-title { color: var(--accent); }
+.loc-coords { font-size: 11px; color: var(--text-dim); margin-top: 1px; }
+.loc-notes { font-size: 12px; color: var(--text-dim); margin-top: 3px; white-space: pre-wrap; }
+.btn-delete-loc {
   color: var(--red);
   background: none;
   border: none;

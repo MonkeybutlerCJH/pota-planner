@@ -206,7 +206,7 @@ async function onMarkerClick(reference, parkData) {
   }
 
   currentPark = park;
-  renderParkingPins(park);
+  renderLocationPins(park);
   renderPanel(park);
 }
 
@@ -224,7 +224,7 @@ function closePanel() {
   panel.addEventListener('transitionend', () => map.invalidateSize(), { once: true });
   panel.classList.add('hidden');
   currentPark = null;
-  parkingLayer.clearLayers();
+  locationsLayer.clearLayers();
 }
 
 function setPanelLoading() {
@@ -298,7 +298,7 @@ function renderPanel(park) {
   body.innerHTML = '';
   body.appendChild(renderMediaSection(park));
   body.appendChild(renderNotesSection(park));
-  body.appendChild(renderParkingSection(park));
+  Object.keys(LOCATION_TYPES).forEach(type => body.appendChild(renderLocationsSection(park, type)));
   body.appendChild(renderActivationsSection(park));
 }
 
@@ -527,169 +527,194 @@ async function saveNote(reference, key, el, indicator) {
 }
 
 // ---------------------------------------------------------------------------
-// Parking location map pins
+// Location type configs — add a new entry here to get a new location type
 // ---------------------------------------------------------------------------
-const parkingLayer = L.layerGroup().addTo(map);
-const parkingMarkers = {};   // loc.id -> L.Marker
+const LOCATION_TYPES = {
+  parking: {
+    label:            'Parking Locations',
+    singularLabel:    'parking location',
+    color:            '#ff8c00',
+    letter:           'P',
+    ctxMenuLabel:     'Add parking here',
+    formId:           'loc-add-form-parking',
+    titlePlaceholder: 'Title (e.g. Main Trailhead Lot)',
+    notesPlaceholder: 'Notes (access, surface, hours, fee…)',
+  },
+  activation: {
+    label:            'Activation Locations',
+    singularLabel:    'activation location',
+    color:            '#00bcd4',
+    letter:           'A',
+    ctxMenuLabel:     'Add activation location here',
+    formId:           'loc-add-form-activation',
+    titlePlaceholder: 'Title (e.g. Summit clearing, Picnic table)',
+    notesPlaceholder: 'Notes (antenna setup, obstructions, signal…)',
+  },
+};
 
-function makeParkingIcon() {
+// ---------------------------------------------------------------------------
+// Location map pins (all types share one layer)
+// ---------------------------------------------------------------------------
+const locationsLayer = L.layerGroup().addTo(map);
+const locationMarkers = {};   // loc.id -> L.Marker
+
+function makeLocationIcon(cfg) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22">
-    <circle cx="11" cy="11" r="9" fill="#ff8c00" stroke="#1a1a1a" stroke-width="2"/>
-    <text x="11" y="15.5" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#fff" font-weight="bold">P</text>
+    <circle cx="11" cy="11" r="9" fill="${cfg.color}" stroke="#1a1a1a" stroke-width="2"/>
+    <text x="11" y="15.5" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#fff" font-weight="bold">${cfg.letter}</text>
   </svg>`;
   return L.divIcon({ html: svg, className: '', iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -12] });
 }
 
-function renderParkingPins(park) {
-  parkingLayer.clearLayers();
-  Object.keys(parkingMarkers).forEach(k => delete parkingMarkers[k]);
-  (park.parking_locations || []).forEach(loc => {
+function renderLocationPins(park) {
+  locationsLayer.clearLayers();
+  Object.keys(locationMarkers).forEach(k => delete locationMarkers[k]);
+  (park.locations || []).forEach(loc => {
+    const cfg = LOCATION_TYPES[loc.type];
+    if (!cfg) return;
     const mapsUrl = `https://www.google.com/maps?q=${loc.latitude},${loc.longitude}`;
-    const marker = L.marker([loc.latitude, loc.longitude], { icon: makeParkingIcon() });
+    const marker = L.marker([loc.latitude, loc.longitude], { icon: makeLocationIcon(cfg) });
     const coords = `${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}`;
-    let popup = `<b style="color:#ff8c00">${loc.title || 'Parking'}</b><br>${coords}`;
+    let popup = `<b style="color:${cfg.color}">${loc.title || cfg.label.replace(' Locations', '')}</b><br>${coords}`;
     if (loc.notes) popup += `<br><span style="color:#ccc">${loc.notes}</span>`;
     popup += `<br><a href="${mapsUrl}" target="_blank">Google Maps ↗</a>`;
     marker.bindPopup(popup);
-    parkingLayer.addLayer(marker);
-    parkingMarkers[loc.id] = marker;
+    locationsLayer.addLayer(marker);
+    locationMarkers[loc.id] = marker;
   });
 }
 
-function focusParkingPin(loc) {
-  const marker = parkingMarkers[loc.id];
+function focusLocationPin(loc) {
+  const marker = locationMarkers[loc.id];
   if (!marker) return;
   map.flyTo([loc.latitude, loc.longitude], Math.max(map.getZoom(), 17), { duration: 0.6 });
   marker.openPopup();
 }
 
 // ---------------------------------------------------------------------------
-// Parking locations section
+// Locations section (generic — driven by LOCATION_TYPES config)
 // ---------------------------------------------------------------------------
-function renderParkingSection(park) {
+function renderLocationsSection(park, type) {
+  const cfg = LOCATION_TYPES[type];
+  const locs = (park.locations || []).filter(l => l.type === type);
+
   const sec = document.createElement('div');
   sec.className = 'panel-section';
 
   const hdr = document.createElement('div');
   hdr.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:10px';
-  hdr.innerHTML = '<h4 style="margin:0">Parking Locations</h4>';
+  hdr.innerHTML = `<h4 style="margin:0">${cfg.label}</h4>`;
   const addBtn = document.createElement('button');
   addBtn.textContent = '+ Add';
   addBtn.style.fontSize = '12px';
-  addBtn.addEventListener('click', () => openParkingForm());
+  addBtn.addEventListener('click', () => openForm());
   hdr.appendChild(addBtn);
   sec.appendChild(hdr);
 
-  // Existing locations list
   const list = document.createElement('div');
-  const locs = park.parking_locations || [];
   if (locs.length === 0) {
-    list.innerHTML = '<p style="color:var(--text-dim);font-size:12px;margin:0 0 8px">No parking locations added yet.</p>';
+    list.innerHTML = `<p style="color:var(--text-dim);font-size:12px;margin:0 0 8px">No ${cfg.singularLabel}s added yet.</p>`;
   } else {
-    locs.forEach(loc => list.appendChild(makeParkingLocItem(loc, park.reference)));
+    locs.forEach(loc => list.appendChild(makeLocationItem(loc, park.reference, cfg)));
   }
   sec.appendChild(list);
 
-  // Add form (hidden by default)
   const form = document.createElement('div');
-  form.id = 'parking-add-form';
-  form.className = 'parking-add-form hidden';
+  form.id = cfg.formId;
+  form.className = 'loc-add-form';
+  form.style.display = 'none';
   form.innerHTML = `
-    <input id="parking-title" type="text" placeholder="Title (e.g. Main Trailhead Lot)" style="width:100%;box-sizing:border-box;margin-bottom:6px">
+    <input class="add-title" type="text" placeholder="${cfg.titlePlaceholder}" style="width:100%;box-sizing:border-box;margin-bottom:6px">
     <div style="display:flex;gap:6px;margin-bottom:6px">
-      <input id="parking-lat" type="number" step="any" placeholder="Latitude" style="flex:1;min-width:0">
-      <input id="parking-lng" type="number" step="any" placeholder="Longitude" style="flex:1;min-width:0">
+      <input class="add-lat" type="number" step="any" placeholder="Latitude" style="flex:1;min-width:0">
+      <input class="add-lng" type="number" step="any" placeholder="Longitude" style="flex:1;min-width:0">
     </div>
-    <textarea id="parking-notes" placeholder="Notes (access, surface, hours, fee…)" rows="3" style="width:100%;box-sizing:border-box;margin-bottom:6px;resize:vertical"></textarea>
+    <textarea class="add-notes" placeholder="${cfg.notesPlaceholder}" rows="3" style="width:100%;box-sizing:border-box;margin-bottom:6px;resize:vertical"></textarea>
     <div style="display:flex;gap:6px">
       <button class="btn-map-center" type="button" style="font-size:11px;flex:1">Use map center</button>
-      <button class="btn-save-parking" type="button" style="font-size:11px;flex:1">Save</button>
-      <button class="btn-cancel-parking" type="button" style="font-size:11px;flex:1">Cancel</button>
+      <button class="btn-save" type="button" style="font-size:11px;flex:1">Save</button>
+      <button class="btn-cancel" type="button" style="font-size:11px;flex:1">Cancel</button>
     </div>`;
   sec.appendChild(form);
 
-  function openParkingForm(lat, lng) {
-    form.classList.remove('hidden');
+  function openForm(lat, lng) {
+    form.style.display = '';
     if (lat != null && lng != null) {
-      form.querySelector('#parking-lat').value = lat.toFixed(6);
-      form.querySelector('#parking-lng').value = lng.toFixed(6);
+      form.querySelector('.add-lat').value = lat.toFixed(6);
+      form.querySelector('.add-lng').value = lng.toFixed(6);
     } else {
       const c = map.getCenter();
-      form.querySelector('#parking-lat').value = c.lat.toFixed(6);
-      form.querySelector('#parking-lng').value = c.lng.toFixed(6);
+      form.querySelector('.add-lat').value = c.lat.toFixed(6);
+      form.querySelector('.add-lng').value = c.lng.toFixed(6);
     }
-    form.querySelector('#parking-title').focus();
+    form.querySelector('.add-title').focus();
     form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
-  // Expose so the map right-click handler can call it
-  sec._openParkingForm = openParkingForm;
+  form._openForm = openForm;
 
   form.querySelector('.btn-map-center').addEventListener('click', () => {
     const c = map.getCenter();
-    form.querySelector('#parking-lat').value = c.lat.toFixed(6);
-    form.querySelector('#parking-lng').value = c.lng.toFixed(6);
+    form.querySelector('.add-lat').value = c.lat.toFixed(6);
+    form.querySelector('.add-lng').value = c.lng.toFixed(6);
   });
 
-  form.querySelector('.btn-cancel-parking').addEventListener('click', () => {
-    form.classList.add('hidden');
+  form.querySelector('.btn-cancel').addEventListener('click', () => {
+    form.style.display = 'none';
   });
 
-  form.querySelector('.btn-save-parking').addEventListener('click', async () => {
-    const lat = parseFloat(form.querySelector('#parking-lat').value);
-    const lng = parseFloat(form.querySelector('#parking-lng').value);
+  form.querySelector('.btn-save').addEventListener('click', async () => {
+    const lat = parseFloat(form.querySelector('.add-lat').value);
+    const lng = parseFloat(form.querySelector('.add-lng').value);
     if (isNaN(lat) || isNaN(lng)) { showToast('Enter valid lat/lng', true); return; }
     if (lat < -90 || lat > 90 || lng < -180 || lng > 180) { showToast('Lat/lng out of range', true); return; }
-    const title = form.querySelector('#parking-title').value.trim();
-    const notes = form.querySelector('#parking-notes').value.trim();
+    const title = form.querySelector('.add-title').value.trim();
+    const notes = form.querySelector('.add-notes').value.trim();
     try {
-      await api(`/api/parks/${park.reference}/parking`, {
+      await api(`/api/parks/${park.reference}/locations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ latitude: lat, longitude: lng, title, notes }),
+        body: JSON.stringify({ type, latitude: lat, longitude: lng, title, notes }),
       });
-      form.classList.add('hidden');
+      form.style.display = 'none';
       currentPark = await api(`/api/parks/${park.reference}`);
-      renderParkingPins(currentPark);
+      renderLocationPins(currentPark);
       renderPanel(currentPark);
     } catch (err) {
-      showToast('Could not save parking location', true);
+      showToast(`Could not save ${cfg.singularLabel}`, true);
     }
   });
 
   return sec;
 }
 
-function makeParkingLocItem(loc, reference) {
+function makeLocationItem(loc, reference, cfg) {
   const item = document.createElement('div');
-  item.className = 'parking-loc-item';
-  item.style.flexDirection = 'column';
+  item.className = 'loc-item';
 
   const coords = `${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}`;
   const mapsUrl = `https://www.google.com/maps?q=${loc.latitude},${loc.longitude}`;
 
-  // --- Display row ---
   const display = document.createElement('div');
-  display.className = 'parking-loc-display';
+  display.className = 'loc-display';
   display.title = 'Click to locate on map';
   display.innerHTML = `
-    <div class="parking-loc-info">
-      <div class="parking-loc-title">${loc.title || coords}</div>
-      ${loc.title ? `<div class="parking-loc-coords">${coords}</div>` : ''}
-      ${loc.notes ? `<div class="parking-loc-notes">${loc.notes}</div>` : ''}
+    <div class="loc-info">
+      <div class="loc-title" style="color:${cfg.color}">${loc.title || coords}</div>
+      ${loc.title ? `<div class="loc-coords">${coords}</div>` : ''}
+      ${loc.notes ? `<div class="loc-notes">${loc.notes}</div>` : ''}
     </div>
     <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
       <a href="${mapsUrl}" target="_blank" rel="noopener" style="font-size:11px;white-space:nowrap">Maps ↗</a>
-      <button class="btn-edit-parking" title="Edit" style="font-size:11px">Edit</button>
-      <button class="btn-delete-parking" title="Delete">✕</button>
+      <button class="btn-edit-loc" title="Edit" style="font-size:11px">Edit</button>
+      <button class="btn-delete-loc" title="Delete">✕</button>
     </div>`;
 
-  display.querySelector('.parking-loc-info').addEventListener('click', () => focusParkingPin(loc));
+  display.querySelector('.loc-info').addEventListener('click', () => focusLocationPin(loc));
   item.appendChild(display);
 
-  // --- Edit form (hidden by default) ---
   const form = document.createElement('div');
-  form.className = 'parking-add-form hidden';
-  form.style.marginTop = '8px';
+  form.className = 'loc-add-form';
+  form.style.cssText = 'display:none;margin-top:8px';
   form.innerHTML = `
     <input class="edit-title" type="text" placeholder="Title" value="${(loc.title || '').replace(/"/g, '&quot;')}" style="width:100%;box-sizing:border-box;margin-bottom:6px">
     <div style="display:flex;gap:6px;margin-bottom:6px">
@@ -703,15 +728,15 @@ function makeParkingLocItem(loc, reference) {
     </div>`;
   item.appendChild(form);
 
-  display.querySelector('.btn-edit-parking').addEventListener('click', () => {
-    display.classList.add('hidden');
-    form.classList.remove('hidden');
+  display.querySelector('.btn-edit-loc').addEventListener('click', () => {
+    display.style.display = 'none';
+    form.style.display = '';
     form.querySelector('.edit-title').focus();
   });
 
   form.querySelector('.btn-cancel-edit').addEventListener('click', () => {
-    form.classList.add('hidden');
-    display.classList.remove('hidden');
+    form.style.display = 'none';
+    display.style.display = '';
   });
 
   form.querySelector('.btn-save-edit').addEventListener('click', async () => {
@@ -720,7 +745,7 @@ function makeParkingLocItem(loc, reference) {
     if (isNaN(lat) || isNaN(lng)) { showToast('Enter valid lat/lng', true); return; }
     if (lat < -90 || lat > 90 || lng < -180 || lng > 180) { showToast('Lat/lng out of range', true); return; }
     try {
-      await api(`/api/parking/${loc.id}`, {
+      await api(`/api/locations/${loc.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -731,22 +756,22 @@ function makeParkingLocItem(loc, reference) {
         }),
       });
       currentPark = await api(`/api/parks/${reference}`);
-      renderParkingPins(currentPark);
+      renderLocationPins(currentPark);
       renderPanel(currentPark);
     } catch (err) {
       showToast('Could not save changes', true);
     }
   });
 
-  display.querySelector('.btn-delete-parking').addEventListener('click', async () => {
-    if (!confirm('Remove this parking location?')) return;
+  display.querySelector('.btn-delete-loc').addEventListener('click', async () => {
+    if (!confirm(`Remove this ${cfg.singularLabel}?`)) return;
     try {
-      await api(`/api/parking/${loc.id}`, { method: 'DELETE' });
+      await api(`/api/locations/${loc.id}`, { method: 'DELETE' });
       currentPark = await api(`/api/parks/${reference}`);
-      renderParkingPins(currentPark);
+      renderLocationPins(currentPark);
       renderPanel(currentPark);
     } catch (err) {
-      showToast('Could not delete parking location', true);
+      showToast(`Could not delete ${cfg.singularLabel}`, true);
     }
   });
 
@@ -997,7 +1022,7 @@ document.getElementById('btn-import-cancel').addEventListener('click', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Map right-click → add parking location
+// Map right-click context menu
 // ---------------------------------------------------------------------------
 map.on('contextmenu', e => {
   document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
@@ -1012,25 +1037,31 @@ map.on('contextmenu', e => {
   menu.style.top  = (mapRect.top  + y) + 'px';
 
   const items = [];
-  if (currentPark) items.push(`<div class="ctx-menu-item" data-action="add-parking">Add parking here</div>`);
+  if (currentPark) {
+    Object.entries(LOCATION_TYPES).forEach(([type, cfg]) => {
+      items.push(`<div class="ctx-menu-item" data-action="add-loc-${type}">${cfg.ctxMenuLabel}</div>`);
+    });
+  }
   items.push(`<div class="ctx-menu-item" data-action="open-maps">Open in Google Maps</div>`);
   menu.innerHTML = items.join('');
   document.body.appendChild(menu);
 
   if (currentPark) {
-    menu.querySelector('[data-action=add-parking]').addEventListener('click', () => {
-      menu.remove();
-      const formSection = document.querySelector('#parking-add-form');
-      if (formSection && formSection._openParkingForm) {
-        formSection._openParkingForm(e.latlng.lat, e.latlng.lng);
-      } else if (formSection) {
-        formSection.classList.remove('hidden');
-        const latEl = formSection.querySelector('#parking-lat');
-        const lngEl = formSection.querySelector('#parking-lng');
-        if (latEl) latEl.value = e.latlng.lat.toFixed(6);
-        if (lngEl) lngEl.value = e.latlng.lng.toFixed(6);
-        formSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }
+    Object.entries(LOCATION_TYPES).forEach(([type, cfg]) => {
+      menu.querySelector(`[data-action=add-loc-${type}]`).addEventListener('click', () => {
+        menu.remove();
+        const formEl = document.getElementById(cfg.formId);
+        if (formEl && formEl._openForm) {
+          formEl._openForm(e.latlng.lat, e.latlng.lng);
+        } else if (formEl) {
+          formEl.classList.remove('hidden');
+          const latEl = formEl.querySelector('.add-lat');
+          const lngEl = formEl.querySelector('.add-lng');
+          if (latEl) latEl.value = e.latlng.lat.toFixed(6);
+          if (lngEl) lngEl.value = e.latlng.lng.toFixed(6);
+          formEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      });
     });
   }
 

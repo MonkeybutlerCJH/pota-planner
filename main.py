@@ -22,7 +22,7 @@ from database import (
     import_activation_csv, update_park_coordinates,
     insert_media, delete_media, set_cover,
     insert_activation,
-    insert_parking_location, update_parking_location, delete_parking_location,
+    insert_location, update_location, delete_location,
 )
 
 log = logging.getLogger(__name__)
@@ -255,38 +255,45 @@ def toggle_wishlist(reference: str, body: WishlistBody):
     return {"reference": reference, "wishlist": body.wishlist}
 
 
-class ParkingLocationBody(BaseModel):
+# ---------------------------------------------------------------------------
+# Locations (parking, activation, …)
+# ---------------------------------------------------------------------------
+
+VALID_LOCATION_TYPES = {"parking", "activation"}
+
+
+class LocationBody(BaseModel):
     latitude: float
     longitude: float
     title: Optional[str] = ""
     notes: Optional[str] = ""
+    type: Optional[str] = None  # required on POST, ignored on PUT
 
 
-@app.post("/api/parks/{reference}/parking")
-def add_parking_location(reference: str, body: ParkingLocationBody):
+@app.post("/api/parks/{reference}/locations")
+def add_location(reference: str, body: LocationBody):
+    if body.type not in VALID_LOCATION_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid location type: {body.type!r}")
     upsert_park_stub(reference)
-    record = insert_parking_location(
-        reference, body.latitude, body.longitude,
-        title=body.title or "", notes=body.notes or ""
-    )
-    return record
+    return insert_location(reference, body.type, body.latitude, body.longitude,
+                           title=body.title or "", notes=body.notes or "")
 
 
-@app.put("/api/parking/{loc_id}")
-def edit_parking_location(loc_id: int, body: ParkingLocationBody):
-    record = update_parking_location(
-        loc_id, body.title or "", body.latitude, body.longitude, body.notes or ""
-    )
+@app.put("/api/locations/{loc_id}")
+def edit_location(loc_id: int, body: LocationBody):
+    record = update_location(loc_id, body.title or "", body.latitude, body.longitude,
+                             body.notes or "")
     if record is None:
-        raise HTTPException(status_code=404, detail="Parking location not found")
+        raise HTTPException(status_code=404, detail="Location not found")
     return record
 
 
-@app.delete("/api/parking/{loc_id}")
-def remove_parking_location(loc_id: int):
-    if not delete_parking_location(loc_id):
-        raise HTTPException(status_code=404, detail="Parking location not found")
+@app.delete("/api/locations/{loc_id}")
+def remove_location(loc_id: int):
+    if not delete_location(loc_id):
+        raise HTTPException(status_code=404, detail="Location not found")
     return {"deleted": loc_id}
+
 
 # ---------------------------------------------------------------------------
 # CSV import

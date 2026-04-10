@@ -38,9 +38,10 @@ def init_db():
                 last_updated        TEXT
             );
 
-            CREATE TABLE IF NOT EXISTS parking_locations (
+            CREATE TABLE IF NOT EXISTS locations (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
                 park_reference  TEXT NOT NULL REFERENCES parks(reference),
+                type            TEXT NOT NULL,
                 latitude        REAL NOT NULL,
                 longitude       REAL NOT NULL,
                 title           TEXT,
@@ -72,12 +73,36 @@ def init_db():
             );
         """)
 
-        # Migrate existing parking_locations tables that predate title/notes columns
-        for col in ("title TEXT", "notes TEXT"):
-            try:
-                conn.execute(f"ALTER TABLE parking_locations ADD COLUMN {col}")
-            except Exception:
-                pass  # column already exists
+        # Migrate parking_locations → locations (type='parking')
+        exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='parking_locations'"
+        ).fetchone()
+        if exists:
+            for col in ("title TEXT", "notes TEXT"):
+                try:
+                    conn.execute(f"ALTER TABLE parking_locations ADD COLUMN {col}")
+                except Exception:
+                    pass
+            conn.execute("""
+                INSERT INTO locations (park_reference, type, latitude, longitude, title, notes, created_at)
+                SELECT park_reference, 'parking', latitude, longitude,
+                       COALESCE(title, ''), COALESCE(notes, ''), created_at
+                FROM parking_locations
+            """)
+            conn.execute("DROP TABLE parking_locations")
+
+        # Migrate activation_locations → locations (type='activation')
+        exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='activation_locations'"
+        ).fetchone()
+        if exists:
+            conn.execute("""
+                INSERT INTO locations (park_reference, type, latitude, longitude, title, notes, created_at)
+                SELECT park_reference, 'activation', latitude, longitude,
+                       COALESCE(title, ''), COALESCE(notes, ''), created_at
+                FROM activation_locations
+            """)
+            conn.execute("DROP TABLE activation_locations")
 
 
 @contextmanager
@@ -170,9 +195,9 @@ def get_park(reference: str) -> dict | None:
                 (reference,),
             ).fetchall()
         )
-        park["parking_locations"] = rows_to_list(
+        park["locations"] = rows_to_list(
             conn.execute(
-                "SELECT * FROM parking_locations WHERE park_reference = ? ORDER BY id ASC",
+                "SELECT * FROM locations WHERE park_reference = ? ORDER BY type, id ASC",
                 (reference,),
             ).fetchall()
         )
@@ -368,31 +393,31 @@ def insert_activation(park_reference: str, activation_date: str, bands_modes: st
 
 
 # ---------------------------------------------------------------------------
-# Parking locations
+# Locations (parking, activation, …)
 # ---------------------------------------------------------------------------
 
-def insert_parking_location(park_reference: str, latitude: float, longitude: float,
-                             title: str = "", notes: str = "") -> dict:
+def insert_location(park_reference: str, loc_type: str, latitude: float,
+                    longitude: float, title: str = "", notes: str = "") -> dict:
     with get_conn() as conn:
         cur = conn.execute(
             """
-            INSERT INTO parking_locations (park_reference, latitude, longitude, title, notes, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO locations (park_reference, type, latitude, longitude, title, notes, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (park_reference, latitude, longitude, title, notes, now_iso()),
+            (park_reference, loc_type, latitude, longitude, title, notes, now_iso()),
         )
         row = conn.execute(
-            "SELECT * FROM parking_locations WHERE id = ?", (cur.lastrowid,)
+            "SELECT * FROM locations WHERE id = ?", (cur.lastrowid,)
         ).fetchone()
     return row_to_dict(row)
 
 
-def update_parking_location(loc_id: int, title: str, latitude: float,
-                             longitude: float, notes: str) -> dict | None:
+def update_location(loc_id: int, title: str, latitude: float,
+                    longitude: float, notes: str) -> dict | None:
     with get_conn() as conn:
         result = conn.execute(
             """
-            UPDATE parking_locations
+            UPDATE locations
             SET title = ?, latitude = ?, longitude = ?, notes = ?
             WHERE id = ?
             """,
@@ -401,16 +426,14 @@ def update_parking_location(loc_id: int, title: str, latitude: float,
         if result.rowcount == 0:
             return None
         row = conn.execute(
-            "SELECT * FROM parking_locations WHERE id = ?", (loc_id,)
+            "SELECT * FROM locations WHERE id = ?", (loc_id,)
         ).fetchone()
     return row_to_dict(row)
 
 
-def delete_parking_location(loc_id: int) -> bool:
+def delete_location(loc_id: int) -> bool:
     with get_conn() as conn:
-        result = conn.execute(
-            "DELETE FROM parking_locations WHERE id = ?", (loc_id,)
-        )
+        result = conn.execute("DELETE FROM locations WHERE id = ?", (loc_id,))
     return result.rowcount > 0
 
 
