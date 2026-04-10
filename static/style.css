@@ -505,13 +505,19 @@ input:focus, textarea:focus { border-color: var(--accent); }
 }
 .loc-add-form textarea:focus { outline: none; border-color: var(--accent); }
 
-.loc-display { display: flex; align-items: flex-start; gap: 8px; width: 100%; }
+.loc-display { width: 100%; }
 .btn-edit-loc { background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--text-dim); cursor: pointer; padding: 1px 6px; }
-.loc-title { font-size: 13px; font-weight: 500; }
+.loc-header { display: flex; align-items: center; gap: 6px; }
+.loc-title { font-size: 13px; font-weight: 500; flex: 1; min-width: 0; }
+.loc-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .loc-info { flex: 1; min-width: 0; cursor: pointer; }
 .loc-info:hover .loc-title { color: var(--accent); }
 .loc-coords { font-size: 11px; color: var(--text-dim); margin-top: 1px; }
 .loc-notes { font-size: 12px; color: var(--text-dim); margin-top: 3px; white-space: pre-wrap; }
+.loc-photo-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 6px; }
+.loc-photo-thumb { width: 64px; height: 48px; object-fit: cover; border-radius: 4px; cursor: pointer; flex-shrink: 0; }
+.btn-loc-photo { background: none; border: 1px dashed var(--border); border-radius: 4px; color: var(--text-dim); cursor: pointer; padding: 2px 8px; font-size: 11px; }
+.btn-loc-photo:hover { border-color: var(--accent); color: var(--accent); }
 .btn-delete-loc {
   color: var(--red);
   background: none;

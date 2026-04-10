@@ -46,7 +46,15 @@ def init_db():
                 longitude       REAL NOT NULL,
                 title           TEXT,
                 notes           TEXT,
+                photo_path      TEXT,
                 created_at      TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS location_photos (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+                file_path   TEXT NOT NULL,
+                created_at  TEXT
             );
 
             CREATE TABLE IF NOT EXISTS activations (
@@ -72,6 +80,24 @@ def init_db():
                 created_at      TEXT
             );
         """)
+
+        # Add photo_path to locations if missing (legacy single-photo column)
+        try:
+            conn.execute("ALTER TABLE locations ADD COLUMN photo_path TEXT")
+        except Exception:
+            pass
+
+        # Migrate legacy photo_path values → location_photos table
+        legacy = conn.execute(
+            "SELECT id, photo_path FROM locations WHERE photo_path IS NOT NULL AND photo_path != ''"
+        ).fetchall()
+        for row in legacy:
+            conn.execute(
+                "INSERT OR IGNORE INTO location_photos (location_id, file_path, created_at) VALUES (?, ?, ?)",
+                (row["id"], row["photo_path"], now_iso()),
+            )
+        if legacy:
+            conn.execute("UPDATE locations SET photo_path = NULL WHERE photo_path IS NOT NULL")
 
         # Migrate parking_locations → locations (type='parking')
         exists = conn.execute(
@@ -201,6 +227,13 @@ def get_park(reference: str) -> dict | None:
                 (reference,),
             ).fetchall()
         )
+        for loc in park["locations"]:
+            loc["photos"] = rows_to_list(
+                conn.execute(
+                    "SELECT * FROM location_photos WHERE location_id = ? ORDER BY id ASC",
+                    (loc["id"],),
+                ).fetchall()
+            )
     return park
 
 
@@ -431,10 +464,42 @@ def update_location(loc_id: int, title: str, latitude: float,
     return row_to_dict(row)
 
 
-def delete_location(loc_id: int) -> bool:
+def delete_location(loc_id: int) -> list[str] | None:
+    """Delete location and return list of photo file_paths to clean up, or None if not found."""
     with get_conn() as conn:
-        result = conn.execute("DELETE FROM locations WHERE id = ?", (loc_id,))
-    return result.rowcount > 0
+        if conn.execute("SELECT 1 FROM locations WHERE id = ?", (loc_id,)).fetchone() is None:
+            return None
+        photo_paths = [
+            r["file_path"] for r in conn.execute(
+                "SELECT file_path FROM location_photos WHERE location_id = ?", (loc_id,)
+            ).fetchall()
+        ]
+        conn.execute("DELETE FROM locations WHERE id = ?", (loc_id,))
+    return photo_paths
+
+
+def add_location_photo(loc_id: int, file_path: str) -> dict:
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO location_photos (location_id, file_path, created_at) VALUES (?, ?, ?)",
+            (loc_id, file_path, now_iso()),
+        )
+        row = conn.execute(
+            "SELECT * FROM location_photos WHERE id = ?", (cur.lastrowid,)
+        ).fetchone()
+    return row_to_dict(row)
+
+
+def delete_location_photo(photo_id: int) -> str | None:
+    """Delete a single location photo record. Returns file_path if found, else None."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT file_path FROM location_photos WHERE id = ?", (photo_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        conn.execute("DELETE FROM location_photos WHERE id = ?", (photo_id,))
+    return row["file_path"]
 
 
 def set_cover(media_id: int) -> bool:

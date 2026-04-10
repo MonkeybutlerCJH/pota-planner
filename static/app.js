@@ -697,19 +697,98 @@ function makeLocationItem(loc, reference, cfg) {
   const display = document.createElement('div');
   display.className = 'loc-display';
   display.title = 'Click to locate on map';
+  const cacheBust = `?t=${Date.now()}`;
+  const thumbsHtml = (loc.photos || []).map(p =>
+    `<img class="loc-photo-thumb" src="/${p.file_path}${cacheBust}" data-photo-id="${p.id}" data-file-path="${p.file_path}" alt="Location photo">`
+  ).join('');
+
   display.innerHTML = `
     <div class="loc-info">
-      <div class="loc-title" style="color:${cfg.color}">${loc.title || coords}</div>
+      <div class="loc-header">
+        <div class="loc-title" style="color:${cfg.color}">${loc.title || coords}</div>
+        <div class="loc-actions">
+          <a href="${mapsUrl}" target="_blank" rel="noopener" style="font-size:11px;white-space:nowrap">Maps ↗</a>
+          <button class="btn-edit-loc" title="Edit" style="font-size:11px">Edit</button>
+          <button class="btn-delete-loc" title="Delete">✕</button>
+        </div>
+      </div>
       ${loc.title ? `<div class="loc-coords">${coords}</div>` : ''}
       ${loc.notes ? `<div class="loc-notes">${loc.notes}</div>` : ''}
-    </div>
-    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-      <a href="${mapsUrl}" target="_blank" rel="noopener" style="font-size:11px;white-space:nowrap">Maps ↗</a>
-      <button class="btn-edit-loc" title="Edit" style="font-size:11px">Edit</button>
-      <button class="btn-delete-loc" title="Delete">✕</button>
+      <div class="loc-photo-row">
+        ${thumbsHtml}
+        <button class="btn-loc-photo" title="Add a photo to this location">+ Photo</button>
+        <input type="file" class="loc-photo-input" accept="image/*" style="display:none">
+      </div>
     </div>`;
 
-  display.querySelector('.loc-info').addEventListener('click', () => focusLocationPin(loc));
+  display.querySelector('.loc-info').addEventListener('click', e => {
+    if (!e.target.closest('.loc-photo-row') && !e.target.closest('.loc-actions')) {
+      focusLocationPin(loc);
+    }
+  });
+
+  // Per-thumbnail: click → lightbox, right-click → ctx-menu
+  display.querySelectorAll('.loc-photo-thumb').forEach(img => {
+    img.addEventListener('click', e => {
+      e.stopPropagation();
+      openLightbox(img.src);
+    });
+    img.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      const photoId = img.dataset.photoId;
+      document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
+      const menu = document.createElement('div');
+      menu.className = 'ctx-menu';
+      menu.style.left = e.clientX + 'px';
+      menu.style.top  = e.clientY + 'px';
+      menu.innerHTML = `
+        <div class="ctx-menu-item" data-action="rotate-cw">Rotate CW</div>
+        <div class="ctx-menu-item" data-action="rotate-ccw">Rotate CCW</div>
+        <div class="ctx-menu-item danger" data-action="delete">Delete</div>`;
+      document.body.appendChild(menu);
+      const rotateOpts = { method: 'POST', headers: {'Content-Type': 'application/json'} };
+      const doRotate = async (degrees) => {
+        menu.remove();
+        try {
+          await api(`/api/location-photos/${photoId}/rotate`, { ...rotateOpts, body: JSON.stringify({ degrees }) });
+          img.src = `/${img.dataset.filePath}?t=${Date.now()}`;
+        } catch { showToast('Could not rotate photo', true); }
+      };
+      menu.querySelector('[data-action=rotate-cw]').addEventListener('click', () => doRotate(90));
+      menu.querySelector('[data-action=rotate-ccw]').addEventListener('click', () => doRotate(270));
+      menu.querySelector('[data-action=delete]').addEventListener('click', async () => {
+        menu.remove();
+        try {
+          await api(`/api/location-photos/${photoId}`, { method: 'DELETE' });
+          currentPark = await api(`/api/parks/${reference}`);
+          renderLocationPins(currentPark);
+          renderPanel(currentPark);
+        } catch { showToast('Could not remove photo', true); }
+      });
+      document.addEventListener('click', () => menu.remove(), { once: true });
+    });
+  });
+
+  // Add photo button
+  const photoInput = display.querySelector('.loc-photo-input');
+  display.querySelector('.btn-loc-photo').addEventListener('click', e => {
+    e.stopPropagation();
+    photoInput.click();
+  });
+  photoInput.addEventListener('change', async () => {
+    const file = photoInput.files[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      await api(`/api/locations/${loc.id}/photo`, { method: 'POST', body: fd });
+      currentPark = await api(`/api/parks/${reference}`);
+      renderLocationPins(currentPark);
+      renderPanel(currentPark);
+    } catch { showToast('Could not upload photo', true); }
+  });
+
   item.appendChild(display);
 
   const form = document.createElement('div');

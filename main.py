@@ -23,6 +23,7 @@ from database import (
     insert_media, delete_media, set_cover,
     insert_activation,
     insert_location, update_location, delete_location,
+    add_location_photo, delete_location_photo,
 )
 
 log = logging.getLogger(__name__)
@@ -290,9 +291,79 @@ def edit_location(loc_id: int, body: LocationBody):
 
 @app.delete("/api/locations/{loc_id}")
 def remove_location(loc_id: int):
-    if not delete_location(loc_id):
+    photo_paths = delete_location(loc_id)
+    if photo_paths is None:
         raise HTTPException(status_code=404, detail="Location not found")
+    for path in photo_paths:
+        full_path = os.path.join(DATA_DIR, path)
+        if os.path.exists(full_path):
+            os.remove(full_path)
     return {"deleted": loc_id}
+
+
+@app.post("/api/locations/{loc_id}/photo")
+async def upload_location_photo(loc_id: int, file: UploadFile = File(...)):
+    with get_conn() as conn:
+        loc_row = conn.execute("SELECT * FROM locations WHERE id = ?", (loc_id,)).fetchone()
+    if loc_row is None:
+        raise HTTPException(status_code=404, detail="Location not found")
+
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in PHOTO_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext!r}")
+
+    reference = loc_row["park_reference"]
+    park_dir = os.path.join(DATA_DIR, "photos", reference)
+    os.makedirs(park_dir, exist_ok=True)
+
+    filename = f"loc_{loc_id}_{uuid.uuid4().hex[:8]}.jpg"
+    save_path = os.path.join(park_dir, filename)
+    rel_path = os.path.join("photos", reference, filename)
+
+    content = await file.read()
+    img = Image.open(io.BytesIO(content))
+    if img.mode in ("P", "RGBA", "LA"):
+        img = img.convert("RGB")
+    w, h = img.size
+    if max(w, h) > MAX_PHOTO_PX:
+        scale = MAX_PHOTO_PX / max(w, h)
+        img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+    img.save(save_path, "JPEG", quality=PHOTO_QUALITY, optimize=True)
+
+    return add_location_photo(loc_id, rel_path)
+
+
+@app.delete("/api/location-photos/{photo_id}")
+def remove_location_photo(photo_id: int):
+    file_path = delete_location_photo(photo_id)
+    if file_path is None:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    full_path = os.path.join(DATA_DIR, file_path)
+    if os.path.exists(full_path):
+        os.remove(full_path)
+    return {"deleted": photo_id}
+
+
+@app.post("/api/location-photos/{photo_id}/rotate")
+def rotate_location_photo(photo_id: int, body: RotateRequest):
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT file_path FROM location_photos WHERE id = ?", (photo_id,)
+        ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    if body.degrees not in (90, 180, 270):
+        raise HTTPException(status_code=400, detail="degrees must be 90, 180, or 270")
+
+    abs_path = os.path.join(DATA_DIR, row["file_path"])
+    if not os.path.exists(abs_path):
+        raise HTTPException(status_code=404, detail="Photo file not found on disk")
+
+    img = Image.open(abs_path)
+    img = img.rotate(-body.degrees, expand=True)
+    img.save(abs_path, "JPEG", quality=PHOTO_QUALITY, optimize=True)
+    return {"rotated": photo_id, "degrees": body.degrees}
 
 
 # ---------------------------------------------------------------------------
