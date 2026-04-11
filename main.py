@@ -24,6 +24,7 @@ from database import (
     insert_activation,
     insert_location, update_location, delete_location,
     add_location_photo, delete_location_photo,
+    insert_link, delete_link,
 )
 
 log = logging.getLogger(__name__)
@@ -419,6 +420,32 @@ def rotate_location_photo(photo_id: int, body: RotateRequest):
     img = img.rotate(-body.degrees, expand=True)
     img.save(abs_path, "JPEG", quality=PHOTO_QUALITY, optimize=True)
     return {"rotated": photo_id, "degrees": body.degrees}
+
+
+# ---------------------------------------------------------------------------
+# Links
+# ---------------------------------------------------------------------------
+
+class LinkBody(BaseModel):
+    title: str
+    url: str
+
+
+@app.post("/api/parks/{reference}/links")
+def add_link(reference: str, body: LinkBody):
+    title = body.title.strip()
+    url = body.url.strip()
+    if not title or not url:
+        raise HTTPException(status_code=400, detail="title and url are required")
+    upsert_park_stub(reference)
+    return insert_link(reference, title, url)
+
+
+@app.delete("/api/links/{link_id}")
+def remove_link(link_id: int):
+    if not delete_link(link_id):
+        raise HTTPException(status_code=404, detail="Link not found")
+    return {"deleted": link_id}
 
 
 # ---------------------------------------------------------------------------

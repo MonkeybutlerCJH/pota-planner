@@ -79,6 +79,14 @@ def init_db():
                 is_cover        INTEGER DEFAULT 0,
                 created_at      TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS links (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                park_reference  TEXT NOT NULL REFERENCES parks(reference),
+                title           TEXT NOT NULL,
+                url             TEXT NOT NULL,
+                created_at      TEXT
+            );
         """)
 
         # Add location_desc to parks if missing (stores POTA location code, e.g. "US-WI")
@@ -240,6 +248,12 @@ def get_park(reference: str) -> dict | None:
                     (loc["id"],),
                 ).fetchall()
             )
+        park["links"] = rows_to_list(
+            conn.execute(
+                "SELECT * FROM links WHERE park_reference = ? ORDER BY created_at ASC",
+                (reference,),
+            ).fetchall()
+        )
     return park
 
 
@@ -506,6 +520,26 @@ def delete_location_photo(photo_id: int) -> str | None:
             return None
         conn.execute("DELETE FROM location_photos WHERE id = ?", (photo_id,))
     return row["file_path"]
+
+
+# ---------------------------------------------------------------------------
+# Links
+# ---------------------------------------------------------------------------
+
+def insert_link(park_reference: str, title: str, url: str) -> dict:
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO links (park_reference, title, url, created_at) VALUES (?, ?, ?, ?)",
+            (park_reference, title, url, now_iso()),
+        )
+        row = conn.execute("SELECT * FROM links WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return row_to_dict(row)
+
+
+def delete_link(link_id: int) -> bool:
+    with get_conn() as conn:
+        result = conn.execute("DELETE FROM links WHERE id = ?", (link_id,))
+    return result.rowcount > 0
 
 
 def set_cover(media_id: int) -> bool:

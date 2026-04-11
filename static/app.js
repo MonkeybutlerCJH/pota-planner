@@ -323,7 +323,7 @@ function renderPanel(park) {
 function renderMediaSection(park) {
   const sec = document.createElement('div');
   sec.className = 'panel-section';
-  sec.innerHTML = '<h4>Photos &amp; Documents</h4>';
+  sec.innerHTML = '<h4>Photos, Documents &amp; Links</h4>';
 
   const photos = (park.media || []).filter(m => m.file_type === 'photo');
   const pdfs   = (park.media || []).filter(m => m.file_type === 'pdf');
@@ -382,14 +382,41 @@ function renderMediaSection(park) {
     sec.appendChild(list);
   }
 
-  // Upload row
+  // Links list
+  const links = park.links || [];
+  if (links.length) {
+    const linkList = document.createElement('div');
+    linkList.className = 'pdf-list';
+    links.forEach(link => {
+      const item = document.createElement('div');
+      item.className = 'pdf-item';
+      const safeUrl = link.url.match(/^https?:\/\//) ? link.url : 'https://' + link.url;
+      item.innerHTML = `
+        <a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${link.title}</a>
+        <button class="btn-delete-link" data-id="${link.id}" title="Delete">✕</button>`;
+      linkList.appendChild(item);
+    });
+    linkList.querySelectorAll('.btn-delete-link').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this link?')) return;
+        await api(`/api/links/${btn.dataset.id}`, { method: 'DELETE' });
+        currentPark = await api(`/api/parks/${park.reference}`);
+        renderPanel(currentPark);
+      });
+    });
+    sec.appendChild(linkList);
+  }
+
+  // Upload row (+ Link button opens a popup modal)
   const uploadRow = document.createElement('div');
   uploadRow.className = 'upload-row';
   uploadRow.innerHTML = `
     <label style="margin:0"><button onclick="this.nextElementSibling.click()">+ Photo</button>
       <input type="file" accept="image/*" style="display:none"></label>
     <label style="margin:0"><button onclick="this.nextElementSibling.click()">+ PDF</button>
-      <input type="file" accept=".pdf" style="display:none"></label>`;
+      <input type="file" accept=".pdf" style="display:none"></label>
+    <button class="btn-add-link">+ Link</button>`;
+  uploadRow.querySelector('.btn-add-link').addEventListener('click', () => openLinkModal(park));
   uploadRow.querySelectorAll('input[type=file]').forEach(input => {
     input.addEventListener('change', async e => {
       const file = e.target.files[0];
@@ -454,6 +481,58 @@ function showPhotoMenu(e, photo, park) {
 
   const dismiss = () => { menu.remove(); document.removeEventListener('click', dismiss); };
   setTimeout(() => document.addEventListener('click', dismiss), 0);
+}
+
+// ---------------------------------------------------------------------------
+// Add Link modal
+// ---------------------------------------------------------------------------
+function openLinkModal(park) {
+  document.querySelectorAll('.link-modal-backdrop').forEach(el => el.remove());
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'link-modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="link-modal">
+      <h4>Add Link</h4>
+      <label>Title<input class="link-title-input" type="text" placeholder="Trail map, AllTrails, etc." /></label>
+      <label>URL<input class="link-url-input" type="url" placeholder="https://…" /></label>
+      <div class="link-modal-btns">
+        <button class="btn-link-save">Add</button>
+        <button class="btn-link-cancel">Cancel</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+
+  const titleInput = backdrop.querySelector('.link-title-input');
+  const urlInput   = backdrop.querySelector('.link-url-input');
+  titleInput.focus();
+
+  const close = () => backdrop.remove();
+
+  backdrop.querySelector('.btn-link-cancel').addEventListener('click', close);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+
+  backdrop.querySelector('.btn-link-save').addEventListener('click', async () => {
+    const title = titleInput.value.trim();
+    const url   = urlInput.value.trim();
+    if (!title || !url) { showToast('Title and URL are required', true); return; }
+    close();
+    await api(`/api/parks/${park.reference}/links`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, url }),
+    });
+    currentPark = await api(`/api/parks/${park.reference}`);
+    renderPanel(currentPark);
+  });
+
+  // Submit on Enter in either field
+  [titleInput, urlInput].forEach(input => {
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') backdrop.querySelector('.btn-link-save').click();
+      if (e.key === 'Escape') close();
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
