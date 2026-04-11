@@ -40,13 +40,16 @@ POTA_TIMEOUT = 10.0
 
 def _cache_get(key: str):
     entry = _cache.get(key)
-    if entry and (time.monotonic() - entry[0]) < CACHE_TTL:
-        return entry[1]
-    return None
+    if entry is None:
+        return None
+    ts, data, ttl = entry
+    if ttl is not None and (time.monotonic() - ts) >= ttl:
+        return None
+    return data
 
 
-def _cache_set(key: str, data):
-    _cache[key] = (time.monotonic(), data)
+def _cache_set(key: str, data, ttl: float | None = CACHE_TTL):
+    _cache[key] = (time.monotonic(), data, ttl)
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +112,52 @@ async def proxy_park(reference: str):
 
     _cache_set(key, data)
     return data
+
+
+@app.get("/api/pota/park-stats/{reference}")
+async def proxy_park_stats(reference: str):
+    """Return community-wide activations/qsos/attempts for a single park."""
+    key = f"stats:{reference}"
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT location_desc FROM parks WHERE reference = ?", (reference,)
+        ).fetchone()
+
+    location_desc = row["location_desc"] if row else None
+    if not location_desc:
+        return {"activations": None, "qsos": None, "attempts": None}
+
+    # Reuse the cached location payload if already fetched
+    loc_key = f"location:{location_desc}"
+    parks = _cache_get(loc_key)
+    if parks is None:
+        try:
+            async with httpx.AsyncClient(timeout=POTA_TIMEOUT) as client:
+                r = await client.get(f"{POTA_BASE}/location/parks/{location_desc}")
+                r.raise_for_status()
+                parks = r.json()
+        except Exception as e:
+            return JSONResponse(
+                status_code=503,
+                content={"error": "POTA API unreachable", "detail": str(e)},
+            )
+        _cache_set(loc_key, parks, ttl=None)
+
+    for p in (parks or []):
+        if p.get("reference", "").upper() == reference.upper():
+            result = {
+                "activations": p.get("activations"),
+                "qsos": p.get("qsos"),
+                "attempts": p.get("attempts"),
+            }
+            _cache_set(key, result, ttl=None)
+            return result
+
+    return {"activations": None, "qsos": None, "attempts": None}
 
 
 @app.get("/api/pota/locations")
@@ -222,23 +271,25 @@ class NotesBody(BaseModel):
     walk_distance: Optional[str] = None
     special_rules: Optional[str] = None
     general_notes: Optional[str] = None
+    location_desc: Optional[str] = None
 
 
 @app.post("/api/parks/{reference}/notes")
 def update_notes(reference: str, body: NotesBody):
     note_fields = {k: v for k, v in body.model_dump().items()
-                   if v is not None and k not in ('name', 'latitude', 'longitude')}
+                   if v is not None and k not in ('name', 'latitude', 'longitude', 'location_desc')}
     upsert_park_notes(reference, note_fields)
-    # Update name/coordinates if provided (fills in stub from POTA API data)
-    if any([body.name, body.latitude, body.longitude]):
+    # Update name/coordinates/location_desc if provided (fills in stub from POTA API data)
+    if any([body.name, body.latitude, body.longitude, body.location_desc]):
         with get_conn() as conn:
             conn.execute(
                 """UPDATE parks SET
-                    name      = COALESCE(name, ?),
-                    latitude  = COALESCE(latitude, ?),
-                    longitude = COALESCE(longitude, ?)
+                    name          = COALESCE(name, ?),
+                    latitude      = COALESCE(latitude, ?),
+                    longitude     = COALESCE(longitude, ?),
+                    location_desc = COALESCE(location_desc, ?)
                    WHERE reference = ?""",
-                (body.name, body.latitude, body.longitude, reference),
+                (body.name, body.latitude, body.longitude, body.location_desc, reference),
             )
     park = get_park(reference)
     return park

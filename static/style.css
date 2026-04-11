@@ -228,6 +228,13 @@ input:focus, textarea:focus { border-color: var(--accent); }
 .badge-unactivated { background: #2a2a2a; color: var(--text-dim); border: 1px solid var(--border); }
 .badge-count { background: #1a2a3a; color: var(--accent); border: 1px solid #1e4a7a; }
 
+#pota-community-stats {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 3px;
+}
+#pota-community-stats.hidden { display: none; }
+
 #btn-wishlist {
   background: transparent;
   border: none;

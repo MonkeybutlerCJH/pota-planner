@@ -186,9 +186,10 @@ async function onMarkerClick(reference, parkData) {
     // Blue marker — create stub, passing along name/coords we already have
     try {
       const stubData = {};
-      if (parkData.name)      stubData.name      = parkData.name;
-      if (parkData.latitude)  stubData.latitude  = parkData.latitude;
-      if (parkData.longitude) stubData.longitude = parkData.longitude;
+      if (parkData.name)         stubData.name         = parkData.name;
+      if (parkData.latitude)     stubData.latitude     = parkData.latitude;
+      if (parkData.longitude)    stubData.longitude    = parkData.longitude;
+      if (parkData.locationDesc) stubData.location_desc = parkData.locationDesc;
       await api(`/api/parks/${reference}/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -292,6 +293,20 @@ function renderPanel(park) {
 
   document.getElementById('btn-wishlist').classList.toggle('active', !!park.wishlist);
   document.getElementById('btn-wishlist').onclick = () => toggleWishlist(park);
+
+  // --- Community stats (async) ---
+  const communityStats = document.getElementById('pota-community-stats');
+  communityStats.classList.add('hidden');
+  api(`/api/pota/park-stats/${park.reference}`).then(stats => {
+    if (!stats || (stats.activations == null && stats.qsos == null)) return;
+    const parts = [];
+    if (stats.activations != null) parts.push(`${stats.activations.toLocaleString()} activations`);
+    if (stats.qsos != null) parts.push(`${stats.qsos.toLocaleString()} QSOs`);
+    if (parts.length) {
+      communityStats.textContent = `All users: ${parts.join(' · ')}`;
+      communityStats.classList.remove('hidden');
+    }
+  }).catch(() => {});
 
   // --- Body ---
   const body = document.getElementById('panel-body');
@@ -1158,6 +1173,7 @@ map.on('contextmenu', e => {
 // ---------------------------------------------------------------------------
 let _allLocations = null;        // cached [{locationDesc, latitude, longitude}, ...]
 const _fetchedLocations = new Set(); // location codes we've already fetched parks for
+const _locationDescSaved = new Set(); // refs we've already POSTed a locationDesc update for
 let _panDebounce = null;
 
 // Pre-load all POTA locations once on startup (small payload, ~3700 entries)
@@ -1200,7 +1216,18 @@ async function fetchApiMarkersForView() {
 
 function addApiMarker(park) {
   if (!park.latitude || !park.longitude) return;
-  if (localParkRefs.has(park.reference)) return;
+  // For local parks that came through the location endpoint, save locationDesc if not yet done
+  if (localParkRefs.has(park.reference)) {
+    if (park.locationDesc && !_locationDescSaved.has(park.reference)) {
+      _locationDescSaved.add(park.reference);
+      api(`/api/parks/${park.reference}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ location_desc: park.locationDesc }),
+      }).catch(() => {});
+    }
+    return;
+  }
   if (markersByRef[park.reference]) return;
 
   const marker = L.marker([park.latitude, park.longitude], {

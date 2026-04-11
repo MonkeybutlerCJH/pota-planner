@@ -81,6 +81,12 @@ def init_db():
             );
         """)
 
+        # Add location_desc to parks if missing (stores POTA location code, e.g. "US-WI")
+        try:
+            conn.execute("ALTER TABLE parks ADD COLUMN location_desc TEXT")
+        except Exception:
+            pass
+
         # Add photo_path to locations if missing (legacy single-photo column)
         try:
             conn.execute("ALTER TABLE locations ADD COLUMN photo_path TEXT")
