@@ -395,6 +395,10 @@ def remove_location_photo(photo_id: int):
     return {"deleted": photo_id}
 
 
+class RotateRequest(BaseModel):
+    degrees: int = 90  # 90 = CW, 270 = CCW
+
+
 @app.post("/api/location-photos/{photo_id}/rotate")
 def rotate_location_photo(photo_id: int, body: RotateRequest):
     with get_conn() as conn:
@@ -579,10 +583,6 @@ def set_cover_photo(media_id: int):
     if not set_cover(media_id):
         raise HTTPException(status_code=404, detail="Photo not found")
     return {"cover": media_id}
-
-
-class RotateRequest(BaseModel):
-    degrees: int = 90  # 90 = CW, 270 = CCW
 
 
 @app.post("/api/media/{media_id}/rotate")
