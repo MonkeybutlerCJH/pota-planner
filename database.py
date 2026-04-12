@@ -442,6 +442,10 @@ def insert_activation(park_reference: str, activation_date: str, bands_modes: st
         row = conn.execute(
             "SELECT * FROM activations WHERE id = ?", (cur.lastrowid,)
         ).fetchone()
+        conn.execute(
+            "UPDATE parks SET activated = 1 WHERE reference = ?",
+            (park_reference,),
+        )
     return row_to_dict(row)
 
 

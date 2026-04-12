@@ -1045,6 +1045,7 @@ document.getElementById('form-activation').addEventListener('submit', async e =>
     });
     document.getElementById('modal-activation').classList.add('hidden');
     currentPark = await api(`/api/parks/${_activationPark.reference}`);
+    addOrUpdateMarker(currentPark);
     renderPanel(currentPark);
   } catch (err) {
     showToast('Could not save activation', true);
