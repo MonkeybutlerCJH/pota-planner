@@ -17,7 +17,7 @@ from PIL import Image
 from pydantic import BaseModel
 
 from database import (
-    DATA_DIR, init_db, get_conn,
+    DATA_DIR, init_db, get_conn, now_iso,
     search_parks, get_all_parks, get_park, upsert_park_notes, upsert_park_stub, set_wishlist,
     import_activation_csv, update_park_coordinates,
     insert_media, delete_media, set_cover,
@@ -253,8 +253,8 @@ def list_tags():
 
 @app.get("/api/parks")
 def list_parks(activated: Optional[bool] = None, wishlist: Optional[bool] = None,
-               tag: Optional[str] = None):
-    return get_all_parks(activated=activated, wishlist=wishlist, tag=tag)
+               tag: Optional[str] = None, min_rating: Optional[float] = None):
+    return get_all_parks(activated=activated, wishlist=wishlist, tag=tag, min_rating=min_rating)
 
 
 @app.get("/api/parks/{reference}")
@@ -280,6 +280,7 @@ class NotesBody(BaseModel):
     special_rules: Optional[str] = None
     general_notes: Optional[str] = None
     location_desc: Optional[str] = None
+    rating: Optional[float] = None
 
 
 @app.post("/api/parks/{reference}/notes")
@@ -301,6 +302,28 @@ def update_notes(reference: str, body: NotesBody):
             )
     park = get_park(reference)
     return park
+
+
+class RatingBody(BaseModel):
+    rating: Optional[float] = None
+
+
+@app.post("/api/parks/{reference}/rating")
+def set_park_rating(reference: str, body: RatingBody):
+    rating = body.rating
+    if rating is not None and not (0 <= rating <= 5 and rating % 0.5 == 0):
+        raise HTTPException(status_code=400, detail="Rating must be 0–5 in 0.5 increments")
+    with get_conn() as conn:
+        existing = conn.execute(
+            "SELECT reference FROM parks WHERE reference = ?", (reference,)
+        ).fetchone()
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Park not found")
+        conn.execute(
+            "UPDATE parks SET rating = ?, last_updated = ? WHERE reference = ?",
+            (rating, now_iso(), reference),
+        )
+    return {"reference": reference, "rating": rating}
 
 
 class WishlistBody(BaseModel):

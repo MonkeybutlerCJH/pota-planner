@@ -140,6 +140,86 @@ input:focus, textarea:focus { border-color: var(--accent); }
 }
 
 /* ---- Panel tags ---- */
+/* ---- Park rating widget ---- */
+#panel-rating {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+}
+.park-rating-label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.park-rating-stars {
+  display: inline-flex;
+  gap: 2px;
+  line-height: 1;
+}
+/* Each star: grey base via ::before, yellow fill clipped by width */
+.park-star {
+  position: relative;
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  font-size: 22px;
+  cursor: pointer;
+  user-select: none;
+}
+.park-star::before {
+  content: '★';
+  color: var(--border);
+  position: absolute;
+  left: 0;
+  top: 0;
+  line-height: 1;
+}
+.park-star-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0%;
+  overflow: hidden;
+  color: var(--yellow);
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.park-star-fill::before {
+  content: '★';
+}
+/* Invisible left/right hit zones */
+.park-star-hit {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 50%;
+}
+.park-star-hit-left  { left: 0; }
+.park-star-hit-right { right: 0; }
+.park-rating-clear {
+  font-size: 11px;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0 2px;
+  opacity: 0.6;
+}
+.park-rating-clear:hover { opacity: 1; }
+
+/* ---- Rating filter star widget (topbar) ---- */
+#rating-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+#rating-filter:hover  { border-color: var(--border); }
+#rating-filter.rf-active { border-color: var(--yellow); }
+.rf-star { font-size: 16px; width: 16px; height: 16px; }
+
 #panel-tags {
   display: flex;
   flex-wrap: wrap;

@@ -102,6 +102,12 @@ def init_db():
         except Exception:
             pass
 
+        # Add rating column if missing (0.5 increments, NULL = unrated)
+        try:
+            conn.execute("ALTER TABLE parks ADD COLUMN rating REAL")
+        except Exception:
+            pass
+
         # Add photo_path to locations if missing (legacy single-photo column)
         try:
             conn.execute("ALTER TABLE locations ADD COLUMN photo_path TEXT")
@@ -182,6 +188,7 @@ def rows_to_list(rows):
 NOTE_FIELDS = {
     "parking_notes", "bathroom_notes", "antenna_notes", "noise_notes",
     "cell_service", "walk_distance", "special_rules", "general_notes",
+    "rating",
 }
 
 
@@ -207,7 +214,7 @@ def search_parks(query: str, limit: int = 10) -> list:
 
 
 def get_all_parks(activated: bool | None = None, wishlist: bool | None = None,
-                  tag: str | None = None) -> list:
+                  tag: str | None = None, min_rating: float | None = None) -> list:
     conditions = []
     params = []
     if activated is not None:
@@ -216,6 +223,9 @@ def get_all_parks(activated: bool | None = None, wishlist: bool | None = None,
     if wishlist is not None:
         conditions.append("wishlist = ?")
         params.append(1 if wishlist else 0)
+    if min_rating is not None:
+        conditions.append("rating >= ?")
+        params.append(min_rating)
 
     where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
     with get_conn() as conn:

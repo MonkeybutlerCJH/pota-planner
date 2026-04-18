@@ -42,9 +42,11 @@ let localParkRefs = new Set();   // references we have in local DB
 let markersByRef = {};           // ref -> L.Marker
 let markerCategoryByRef = {};    // ref -> 'activated'|'wishlist'|'unactivated'|'api'
 let parkTagsByRef = {};          // ref -> string[]
+let parkRatingByRef = {};        // ref -> number|null
 const activeFilters = new Set(['activated', 'wishlist', 'unactivated']);
 const activeTagFilters = new Set(); // set of tag strings (AND logic)
 let _knownTags = [];                // cached tag list for autocomplete
+let minRatingFilter = null;         // null = no filter, number = minimum rating
 
 // ---------------------------------------------------------------------------
 // Filter controls
@@ -62,7 +64,9 @@ function applyFilters() {
     const catOk = activeFilters.has(cat);
     const parkTags = parkTagsByRef[ref] || [];
     const tagOk = activeTagFilters.size === 0 || [...activeTagFilters].every(t => parkTags.includes(t));
-    const show = catOk && tagOk;
+    const rating = parkRatingByRef[ref];
+    const ratingOk = minRatingFilter === null || (rating != null && rating >= minRatingFilter);
+    const show = catOk && tagOk && ratingOk;
     if (show && !group.hasLayer(marker)) group.addLayer(marker);
     else if (!show && group.hasLayer(marker)) group.removeLayer(marker);
   });
@@ -81,6 +85,58 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
     applyFilters();
   });
 });
+
+// Rating filter star widget (topbar)
+(function initRatingFilter() {
+  const container = document.getElementById('rating-filter');
+  const fills = [];
+
+  for (let i = 1; i <= 5; i++) {
+    const star = document.createElement('span');
+    star.className = 'park-star rf-star';
+
+    const fill = document.createElement('span');
+    fill.className = 'park-star-fill';
+    star.appendChild(fill);
+    fills.push(fill);
+
+    const leftHit = document.createElement('span');
+    leftHit.className = 'park-star-hit park-star-hit-left';
+    leftHit.dataset.value = i - 0.5;
+    star.appendChild(leftHit);
+
+    const rightHit = document.createElement('span');
+    rightHit.className = 'park-star-hit park-star-hit-right';
+    rightHit.dataset.value = i;
+    star.appendChild(rightHit);
+
+    container.appendChild(star);
+  }
+
+  function updateDisplay(val) {
+    fills.forEach((fill, idx) => {
+      const starNum = idx + 1;
+      if (!val || val < starNum - 0.5) fill.style.width = '0%';
+      else if (val >= starNum)         fill.style.width = '100%';
+      else                             fill.style.width = '50%';
+    });
+  }
+
+  container.addEventListener('mouseover', e => {
+    const hit = e.target.closest('.park-star-hit');
+    if (hit) updateDisplay(parseFloat(hit.dataset.value));
+  });
+  container.addEventListener('mouseleave', () => updateDisplay(minRatingFilter));
+  container.addEventListener('click', e => {
+    const hit = e.target.closest('.park-star-hit');
+    if (!hit) return;
+    const val = parseFloat(hit.dataset.value);
+    minRatingFilter = val === minRatingFilter ? null : val;
+    updateDisplay(minRatingFilter);
+    container.classList.toggle('rf-active', minRatingFilter !== null);
+    applyFilters();
+  });
+})();
 
 const tagFilterEl = document.getElementById('tag-filter');
 const tagFilterChipsEl = document.getElementById('tag-filter-chips');
@@ -210,6 +266,7 @@ function addOrUpdateMarker(park) {
   localParkRefs.add(park.reference);
   markerCategoryByRef[park.reference] = parkCategory(park);
   parkTagsByRef[park.reference] = park.tags || [];
+  parkRatingByRef[park.reference] = park.rating ?? null;
 
   if (markersByRef[park.reference]) {
     const marker = markersByRef[park.reference];
@@ -219,7 +276,9 @@ function addOrUpdateMarker(park) {
     const cat = markerCategoryByRef[park.reference];
     const parkTags = parkTagsByRef[park.reference] || [];
     const tagOk = activeTagFilters.size === 0 || [...activeTagFilters].every(t => parkTags.includes(t));
-    if (activeFilters.has(cat) && tagOk) clusterGroupFor(cat).addLayer(marker);
+    const rating = parkRatingByRef[park.reference];
+    const ratingOk = minRatingFilter === null || (rating != null && rating >= minRatingFilter);
+    if (activeFilters.has(cat) && tagOk && ratingOk) clusterGroupFor(cat).addLayer(marker);
     return;
   }
 
@@ -229,7 +288,8 @@ function addOrUpdateMarker(park) {
   marker.on('click', () => onMarkerClick(park.reference, park));
   markersByRef[park.reference] = marker;
   const cat = markerCategoryByRef[park.reference];
-  if (activeFilters.has(cat)) clusterGroupFor(cat).addLayer(marker);
+  const ratingOk = minRatingFilter === null || (parkRatingByRef[park.reference] != null && parkRatingByRef[park.reference] >= minRatingFilter);
+  if (activeFilters.has(cat) && ratingOk) clusterGroupFor(cat).addLayer(marker);
 }
 
 // ---------------------------------------------------------------------------
@@ -352,6 +412,9 @@ function renderPanel(park) {
   document.getElementById('btn-wishlist').classList.toggle('active', !!park.wishlist);
   document.getElementById('btn-wishlist').onclick = () => toggleWishlist(park);
 
+  // --- Rating ---
+  renderPanelRating(park);
+
   // --- Tags ---
   renderPanelTags(park);
 
@@ -376,6 +439,108 @@ function renderPanel(park) {
   body.appendChild(renderNotesSection(park));
   Object.keys(LOCATION_TYPES).forEach(type => body.appendChild(renderLocationsSection(park, type)));
   body.appendChild(renderActivationsSection(park));
+}
+
+// ---------------------------------------------------------------------------
+// Park rating
+// ---------------------------------------------------------------------------
+function renderPanelRating(park) {
+  const container = document.getElementById('panel-rating');
+  container.innerHTML = '';
+
+  let currentRating = park.rating ?? null;
+
+  const label = document.createElement('span');
+  label.className = 'park-rating-label';
+  label.textContent = 'Rating:';
+  container.appendChild(label);
+
+  const starsEl = document.createElement('span');
+  starsEl.className = 'park-rating-stars';
+
+  // Each star: grey base via ::before, yellow fill overlay clipped by width,
+  // plus two invisible hit zones for left (0.5) and right (1.0) halves.
+  const fills = [];
+  for (let i = 1; i <= 5; i++) {
+    const star = document.createElement('span');
+    star.className = 'park-star';
+
+    const fill = document.createElement('span');
+    fill.className = 'park-star-fill';
+    star.appendChild(fill);
+    fills.push(fill);
+
+    const leftHit = document.createElement('span');
+    leftHit.className = 'park-star-hit park-star-hit-left';
+    leftHit.dataset.value = i - 0.5;
+    star.appendChild(leftHit);
+
+    const rightHit = document.createElement('span');
+    rightHit.className = 'park-star-hit park-star-hit-right';
+    rightHit.dataset.value = i;
+    star.appendChild(rightHit);
+
+    starsEl.appendChild(star);
+  }
+  container.appendChild(starsEl);
+
+  const clearBtn = document.createElement('span');
+  clearBtn.className = 'park-rating-clear';
+  clearBtn.title = 'Clear rating';
+  clearBtn.textContent = '✕';
+  clearBtn.style.display = currentRating ? '' : 'none';
+  container.appendChild(clearBtn);
+
+  function updateDisplay(val) {
+    fills.forEach((fill, idx) => {
+      const starNum = idx + 1;
+      if (!val || val < starNum - 0.5) fill.style.width = '0%';
+      else if (val >= starNum)         fill.style.width = '100%';
+      else                             fill.style.width = '50%';
+    });
+  }
+
+  updateDisplay(currentRating);
+
+  starsEl.addEventListener('mouseover', e => {
+    const hit = e.target.closest('.park-star-hit');
+    if (hit) updateDisplay(parseFloat(hit.dataset.value));
+  });
+  starsEl.addEventListener('mouseleave', () => updateDisplay(currentRating));
+
+  starsEl.addEventListener('click', async e => {
+    const hit = e.target.closest('.park-star-hit');
+    if (!hit) return;
+    const newRating = parseFloat(hit.dataset.value);
+    const finalRating = newRating === currentRating ? null : newRating;
+    await saveRating(park, finalRating);
+    currentRating = park.rating ?? null;
+    clearBtn.style.display = currentRating ? '' : 'none';
+    updateDisplay(currentRating);
+  });
+
+  clearBtn.addEventListener('click', async () => {
+    await saveRating(park, null);
+    currentRating = null;
+    clearBtn.style.display = 'none';
+    updateDisplay(null);
+  });
+}
+
+async function saveRating(park, rating) {
+  try {
+    const result = await api(`/api/parks/${park.reference}/rating`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rating }),
+    });
+    park.rating = result.rating;
+    parkRatingByRef[park.reference] = result.rating ?? null;
+    renderPanelRating(park);
+    applyFilters();
+  } catch (e) {
+    showToast('Could not save rating', true);
+  }
 }
 
 // ---------------------------------------------------------------------------
