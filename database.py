@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 from contextlib import contextmanager
@@ -92,6 +93,12 @@ def init_db():
         # Add location_desc to parks if missing (stores POTA location code, e.g. "US-WI")
         try:
             conn.execute("ALTER TABLE parks ADD COLUMN location_desc TEXT")
+        except Exception:
+            pass
+
+        # Add tags column if missing (JSON array of strings, e.g. '["picnictable","shelter"]')
+        try:
+            conn.execute("ALTER TABLE parks ADD COLUMN tags TEXT DEFAULT '[]'")
         except Exception:
             pass
 
@@ -199,7 +206,8 @@ def search_parks(query: str, limit: int = 10) -> list:
     return rows_to_list(rows)
 
 
-def get_all_parks(activated: bool | None = None, wishlist: bool | None = None) -> list:
+def get_all_parks(activated: bool | None = None, wishlist: bool | None = None,
+                  tag: str | None = None) -> list:
     conditions = []
     params = []
     if activated is not None:
@@ -212,7 +220,43 @@ def get_all_parks(activated: bool | None = None, wishlist: bool | None = None) -
     where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
     with get_conn() as conn:
         rows = conn.execute(f"SELECT * FROM parks {where}", params).fetchall()
-    return rows_to_list(rows)
+    parks = rows_to_list(rows)
+    for p in parks:
+        p["tags"] = _parse_tags(p.get("tags"))
+    if tag:
+        tag_lower = tag.lower()
+        parks = [p for p in parks if tag_lower in p["tags"]]
+    return parks
+
+
+def _parse_tags(raw) -> list:
+    if not raw:
+        return []
+    try:
+        return json.loads(raw)
+    except Exception:
+        return []
+
+
+def get_all_tags() -> list:
+    with get_conn() as conn:
+        rows = conn.execute("SELECT tags FROM parks WHERE tags IS NOT NULL AND tags != '[]'").fetchall()
+    seen = set()
+    for row in rows:
+        for t in _parse_tags(row["tags"]):
+            if t:
+                seen.add(t.lower())
+    return sorted(seen)
+
+
+def set_park_tags(reference: str, tags: list) -> bool:
+    clean = sorted(set(t.strip().lower() for t in tags if t.strip()))
+    with get_conn() as conn:
+        result = conn.execute(
+            "UPDATE parks SET tags = ?, last_updated = ? WHERE reference = ?",
+            (json.dumps(clean), now_iso(), reference),
+        )
+    return result.rowcount > 0
 
 
 def get_park(reference: str) -> dict | None:
@@ -223,6 +267,7 @@ def get_park(reference: str) -> dict | None:
         if park is None:
             return None
 
+        park["tags"] = _parse_tags(park.get("tags"))
         park["media"] = rows_to_list(
             conn.execute(
                 "SELECT * FROM media WHERE park_reference = ? ORDER BY is_cover DESC, created_at ASC",

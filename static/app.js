@@ -41,7 +41,10 @@ let currentPark = null;          // full park object currently shown in panel
 let localParkRefs = new Set();   // references we have in local DB
 let markersByRef = {};           // ref -> L.Marker
 let markerCategoryByRef = {};    // ref -> 'activated'|'wishlist'|'unactivated'|'api'
+let parkTagsByRef = {};          // ref -> string[]
 const activeFilters = new Set(['activated', 'wishlist', 'unactivated']);
+const activeTagFilters = new Set(); // set of tag strings (AND logic)
+let _knownTags = [];                // cached tag list for autocomplete
 
 // ---------------------------------------------------------------------------
 // Filter controls
@@ -56,7 +59,10 @@ function applyFilters() {
   Object.entries(markersByRef).forEach(([ref, marker]) => {
     const cat = markerCategoryByRef[ref] || 'unactivated';
     const group = clusterGroupFor(cat);
-    const show = activeFilters.has(cat);
+    const catOk = activeFilters.has(cat);
+    const parkTags = parkTagsByRef[ref] || [];
+    const tagOk = activeTagFilters.size === 0 || [...activeTagFilters].every(t => parkTags.includes(t));
+    const show = catOk && tagOk;
     if (show && !group.hasLayer(marker)) group.addLayer(marker);
     else if (!show && group.hasLayer(marker)) group.removeLayer(marker);
   });
@@ -75,6 +81,55 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
     applyFilters();
   });
 });
+
+const tagFilterEl = document.getElementById('tag-filter');
+const tagFilterChipsEl = document.getElementById('tag-filter-chips');
+
+tagFilterEl.addEventListener('change', () => {
+  const val = tagFilterEl.value;
+  tagFilterEl.value = '';
+  if (!val || activeTagFilters.has(val)) return;
+  activeTagFilters.add(val);
+  renderTagFilterChips();
+  applyFilters();
+});
+
+function renderTagFilterChips() {
+  tagFilterChipsEl.innerHTML = '';
+  activeTagFilters.forEach(tag => {
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip tag-filter-chip';
+    chip.textContent = `#${tag}`;
+    const del = document.createElement('button');
+    del.className = 'tag-chip-remove';
+    del.textContent = '×';
+    del.onclick = () => {
+      activeTagFilters.delete(tag);
+      renderTagFilterChips();
+      applyFilters();
+    };
+    chip.appendChild(del);
+    tagFilterChipsEl.appendChild(chip);
+  });
+}
+
+async function loadTagFilterOptions() {
+  try {
+    const data = await api('/api/tags');
+    populateTagFilterOptions(data.tags || []);
+  } catch (e) { /* non-fatal */ }
+}
+
+function populateTagFilterOptions(tags) {
+  _knownTags = tags;
+  while (tagFilterEl.options.length > 1) tagFilterEl.remove(1);
+  tags.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t;
+    opt.textContent = `#${t}`;
+    tagFilterEl.appendChild(opt);
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Marker icons
@@ -154,6 +209,7 @@ function addOrUpdateMarker(park) {
 
   localParkRefs.add(park.reference);
   markerCategoryByRef[park.reference] = parkCategory(park);
+  parkTagsByRef[park.reference] = park.tags || [];
 
   if (markersByRef[park.reference]) {
     const marker = markersByRef[park.reference];
@@ -161,7 +217,9 @@ function addOrUpdateMarker(park) {
     // Re-apply filter visibility; remove from all groups first in case category changed
     Object.values(clusterGroups).forEach(g => { if (g.hasLayer(marker)) g.removeLayer(marker); });
     const cat = markerCategoryByRef[park.reference];
-    if (activeFilters.has(cat)) clusterGroupFor(cat).addLayer(marker);
+    const parkTags = parkTagsByRef[park.reference] || [];
+    const tagOk = activeTagFilters.size === 0 || [...activeTagFilters].every(t => parkTags.includes(t));
+    if (activeFilters.has(cat) && tagOk) clusterGroupFor(cat).addLayer(marker);
     return;
   }
 
@@ -294,6 +352,9 @@ function renderPanel(park) {
   document.getElementById('btn-wishlist').classList.toggle('active', !!park.wishlist);
   document.getElementById('btn-wishlist').onclick = () => toggleWishlist(park);
 
+  // --- Tags ---
+  renderPanelTags(park);
+
   // --- Community stats (async) ---
   const communityStats = document.getElementById('pota-community-stats');
   communityStats.classList.add('hidden');
@@ -315,6 +376,97 @@ function renderPanel(park) {
   body.appendChild(renderNotesSection(park));
   Object.keys(LOCATION_TYPES).forEach(type => body.appendChild(renderLocationsSection(park, type)));
   body.appendChild(renderActivationsSection(park));
+}
+
+// ---------------------------------------------------------------------------
+// Tags
+// ---------------------------------------------------------------------------
+function renderPanelTags(park) {
+  const container = document.getElementById('panel-tags');
+  container.innerHTML = '';
+
+  const tags = park.tags || [];
+
+  tags.forEach(tag => {
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip';
+    chip.textContent = `#${tag}`;
+    const del = document.createElement('button');
+    del.className = 'tag-chip-remove';
+    del.textContent = '×';
+    del.title = `Remove #${tag}`;
+    del.onclick = () => saveTagsForPark(park, tags.filter(t => t !== tag));
+    chip.appendChild(del);
+    container.appendChild(chip);
+  });
+
+  // Add-tag input with custom autocomplete
+  const wrapper = document.createElement('div');
+  wrapper.className = 'tag-input-wrapper';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'tag-input';
+  input.placeholder = '#addtag';
+  wrapper.appendChild(input);
+
+  const dropdown = document.createElement('div');
+  dropdown.className = 'tag-autocomplete hidden';
+  wrapper.appendChild(dropdown);
+  container.appendChild(wrapper);
+
+  function showSuggestions() {
+    const raw = input.value.replace(/^#+/, '').trim().toLowerCase();
+    const matches = _knownTags.filter(t => !tags.includes(t) && t.includes(raw));
+    dropdown.innerHTML = '';
+    if (!raw || matches.length === 0) { dropdown.classList.add('hidden'); return; }
+    matches.forEach(t => {
+      const item = document.createElement('div');
+      item.className = 'tag-autocomplete-item';
+      item.textContent = `#${t}`;
+      item.addEventListener('mousedown', e => {
+        e.preventDefault(); // prevent blur firing before click
+        selectTag(t);
+      });
+      dropdown.appendChild(item);
+    });
+    dropdown.classList.remove('hidden');
+  }
+
+  function selectTag(val) {
+    if (!val || tags.includes(val)) { input.value = ''; dropdown.classList.add('hidden'); return; }
+    saveTagsForPark(park, [...tags, val]);
+  }
+
+  function commitInput() {
+    const val = input.value.replace(/^#+/, '').trim().toLowerCase();
+    dropdown.classList.add('hidden');
+    selectTag(val);
+  }
+
+  input.addEventListener('input', showSuggestions);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); commitInput(); }
+    if (e.key === 'Escape') { dropdown.classList.add('hidden'); input.value = ''; }
+  });
+  input.addEventListener('blur', commitInput);
+}
+
+async function saveTagsForPark(park, newTags) {
+  try {
+    const result = await api(`/api/parks/${park.reference}/tags`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tags: newTags }),
+    });
+    park.tags = result.tags;
+    parkTagsByRef[park.reference] = result.tags;
+    renderPanelTags(park);
+    applyFilters();
+    loadTagFilterOptions();
+  } catch (e) {
+    showToast('Could not save tags', true);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1326,3 +1478,4 @@ function addApiMarker(park) {
 // ---------------------------------------------------------------------------
 loadLocalMarkers();
 loadPotaLocations();
+loadTagFilterOptions();

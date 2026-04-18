@@ -114,6 +114,105 @@ input:focus, textarea:focus { border-color: var(--accent); }
 .filter-btn[data-filter="unactivated"]:hover,
 .filter-btn[data-filter="unactivated"].active { background: rgba(136,136,136,0.10); }
 
+/* ---- Tag filter ---- */
+#tag-filter {
+  background: var(--bg3);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  max-width: 90px;
+}
+#tag-filter:focus { outline: none; border-color: var(--accent); }
+
+#tag-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.tag-filter-chip {
+  font-size: 11px;
+  padding: 2px 7px 2px 8px;
+}
+
+/* ---- Panel tags ---- */
+#panel-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  min-height: 24px;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(74,158,255,0.15);
+  border: 1px solid rgba(74,158,255,0.35);
+  color: var(--accent);
+  border-radius: 12px;
+  padding: 2px 8px 2px 9px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.tag-chip-remove {
+  background: none;
+  border: none;
+  color: var(--accent);
+  padding: 0 0 0 2px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.6;
+}
+.tag-chip-remove:hover { opacity: 1; background: none; }
+
+.tag-input-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.tag-input {
+  width: 90px;
+  font-size: 12px;
+  padding: 2px 7px;
+  border-radius: 12px;
+  background: var(--bg3);
+  border: 1px dashed var(--border);
+  color: var(--text-dim);
+  transition: width 0.15s;
+}
+.tag-input:focus { border-color: var(--accent); color: var(--text); width: 120px; }
+
+.tag-autocomplete {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  min-width: 120px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  z-index: 200;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  overflow: hidden;
+}
+.tag-autocomplete.hidden { display: none; }
+
+.tag-autocomplete-item {
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--accent);
+  cursor: pointer;
+}
+.tag-autocomplete-item:hover { background: var(--bg3); }
+
 /* ---- Search ---- */
 #search-wrapper {
   position: relative;

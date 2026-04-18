@@ -25,6 +25,10 @@
         <button class="filter-btn active" data-filter="activated"   title="Show activated parks">Activated</button>
         <button class="filter-btn active" data-filter="wishlist"    title="Show wishlisted parks">Wishlist</button>
         <button class="filter-btn active" data-filter="unactivated" title="Show unactivated parks">Unactivated</button>
+        <div id="tag-filter-chips"></div>
+        <select id="tag-filter" title="Add tag filter">
+          <option value="">+ tag</option>
+        </select>
       </div>
       <div id="search-wrapper">
         <input type="text" id="search-input" placeholder="Search park name or reference…" autocomplete="off">
@@ -52,6 +56,7 @@
             <span id="badge-count" class="badge badge-count hidden"></span>
             <button id="btn-wishlist" title="Toggle wishlist">&#9733;</button>
           </div>
+          <div id="panel-tags"></div>
           <div id="pota-community-stats" class="hidden"></div>
         </div>
       </div>

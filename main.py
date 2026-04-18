@@ -25,6 +25,7 @@ from database import (
     insert_location, update_location, delete_location,
     add_location_photo, delete_location_photo,
     insert_link, delete_link,
+    get_all_tags, set_park_tags,
 )
 
 log = logging.getLogger(__name__)
@@ -245,9 +246,15 @@ async def search(q: str = ""):
     return results
 
 
+@app.get("/api/tags")
+def list_tags():
+    return {"tags": get_all_tags()}
+
+
 @app.get("/api/parks")
-def list_parks(activated: Optional[bool] = None, wishlist: Optional[bool] = None):
-    return get_all_parks(activated=activated, wishlist=wishlist)
+def list_parks(activated: Optional[bool] = None, wishlist: Optional[bool] = None,
+               tag: Optional[str] = None):
+    return get_all_parks(activated=activated, wishlist=wishlist, tag=tag)
 
 
 @app.get("/api/parks/{reference}")
@@ -306,6 +313,17 @@ def toggle_wishlist(reference: str, body: WishlistBody):
     upsert_park_stub(reference)
     set_wishlist(reference, body.wishlist)
     return {"reference": reference, "wishlist": body.wishlist}
+
+
+class TagsBody(BaseModel):
+    tags: list[str]
+
+
+@app.post("/api/parks/{reference}/tags")
+def update_tags(reference: str, body: TagsBody):
+    upsert_park_stub(reference)
+    set_park_tags(reference, body.tags)
+    return {"reference": reference, "tags": sorted(set(t.strip().lower() for t in body.tags if t.strip()))}
 
 
 # ---------------------------------------------------------------------------
